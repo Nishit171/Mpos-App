@@ -1,45 +1,43 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React from "react";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import QuickBillingHomePage from "./src/components/sections/quick-billing/QuickBillingHomePage";
+import LoginComponent from "./src/components/sections/login/login-component";
+import { CartProvider } from "./src/context/cart-context";
+import { AuthProvider, useAuth } from "./src/context/auth-context";
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+function RootNavigator() {
+  const { user, isLoading } = useAuth();
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
+  if (isLoading) {
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0064c2" />
+      </View>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
+  return user ? <QuickBillingHomePage /> : <LoginComponent />;
+}
 
+export default function App() {
   return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
+    <AuthProvider>
+      <CartProvider>
+        <SafeAreaView style={{ flex: 1 }}>
+          <RootNavigator />
+        </SafeAreaView>
+      </CartProvider>
+    </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
   },
 });
 
-export default App;
