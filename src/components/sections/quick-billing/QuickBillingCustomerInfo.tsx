@@ -53,6 +53,7 @@ export default function QuickBillingCustomerInfo({
   const [gstInput, setGstInput] = useState('');
   const [gstLoading, setGstLoading] = useState(false);
   const [checkingGst, setCheckingGst] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
 
   const searchCustomersHandler = async (
     searchName: string,
@@ -101,6 +102,7 @@ export default function QuickBillingCustomerInfo({
     }
     if (value === '' || /^[6-9]/.test(value)) {
       onUpdateInfo(name, value);
+      setPhoneTouched(false);
       setActiveField('phone');
       setTimeout(() => {
         searchCustomersHandler(name, value);
@@ -108,19 +110,93 @@ export default function QuickBillingCustomerInfo({
     }
   };
 
-  const handleSuggestionClick = (customer: Customer) => {
+  const isPhoneFormatValid =
+    phone.length === 0 || /^[6-9]\d{9}$/.test(phone);
+  const showPhoneError =
+    (phone.length === 10 && !isPhoneFormatValid) ||
+    (phoneTouched && phone.length > 0 && phone.length < 10);
+
+  const suggestionsSection = showSuggestions ? (
+    <View style={styles.suggestionsContainer}>
+      {isLoading ? (
+        <View style={styles.suggestionsHeader}>
+          <Text style={styles.suggestionsTitle}>Searching customers...</Text>
+          <ActivityIndicator size="small" color="#0064c2" />
+        </View>
+      ) : suggestions.length > 0 ? (
+        <>
+          <View style={styles.suggestionsHeader}>
+            <Text style={styles.suggestionsTitle}>
+              Customers Found ({suggestions.length})
+            </Text>
+            <Pressable
+              onPress={clearSuggestions}
+              style={styles.clearSuggestionsButton}
+            >
+              <Text style={styles.clearSuggestionsText}>✕</Text>
+            </Pressable>
+          </View>
+          <ScrollView style={styles.suggestionsList}>
+            {suggestions.map((customer, index) => {
+              const fullName = `${customer.firstName} ${customer.lastName}`.trim();
+              return (
+                <Pressable
+                  key={customer.id || index}
+                  onPress={() => handleSuggestionClick(customer)}
+                  style={styles.suggestionRow}
+                >
+                  <View style={styles.suggestionTextWrapper}>
+                    <Text style={styles.suggestionName}>
+                      {fullName || 'No Name'}
+                    </Text>
+                    <Text style={styles.suggestionPhone}>
+                      {customer.mobileNum}
+                    </Text>
+                    {customer.emailId ? (
+                      <Text style={styles.suggestionEmail}>
+                        {customer.emailId}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      ) : (name.length >= 2 || phone.length >= 3) && !isLoading ? (
+        <View>
+          <View style={styles.suggestionsHeader}>
+            <Text style={styles.suggestionsTitle}>No customers found</Text>
+            <Pressable
+              onPress={clearSuggestions}
+              style={styles.clearSuggestionsButton}
+            >
+              <Text style={styles.clearSuggestionsText}>✕</Text>
+            </Pressable>
+          </View>
+          <View style={styles.noResultsBody}>
+            <Text style={styles.noResultsText}>
+              Try searching with a different name or phone number
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  ) : null;
+
+  function handleSuggestionClick(customer: Customer) {
     const fullName = `${customer.firstName} ${customer.lastName}`.trim();
     onUpdateInfo(fullName, customer.mobileNum);
     setShowSuggestions(false);
     setSuggestions([]);
     setActiveField(null);
-  };
+  }
 
-  const clearSuggestions = () => {
+  function clearSuggestions() {
     setShowSuggestions(false);
     setSuggestions([]);
     setActiveField(null);
-  };
+  }
 
   const handleTaxInvoiceClick = async () => {
     setCheckingGst(true);
@@ -202,6 +278,7 @@ export default function QuickBillingCustomerInfo({
                 maxLength={10}
                 placeholder="Phone Number"
                 onChangeText={handlePhoneChange}
+                onBlur={() => setPhoneTouched(true)}
                 onFocus={() => {
                   if (suggestions.length > 0) {
                     setShowSuggestions(true);
@@ -210,7 +287,7 @@ export default function QuickBillingCustomerInfo({
                 }}
                 style={[
                   styles.input,
-                  phone && phone.length > 0 && phone.length !== 10
+                  showPhoneError
                     ? styles.inputError
                     : styles.inputFilled,
                 ]}
@@ -226,6 +303,7 @@ export default function QuickBillingCustomerInfo({
             </View>
           </View>
         </View>
+        {activeField === 'phone' && suggestionsSection}
 
         {/* Name */}
         <View style={styles.fieldRow}>
@@ -255,6 +333,7 @@ export default function QuickBillingCustomerInfo({
             </View>
           </View>
         </View>
+        {activeField === 'name' && suggestionsSection}
 
         {/* Bill type */}
         <View style={styles.fieldRow}>
@@ -341,90 +420,10 @@ export default function QuickBillingCustomerInfo({
         </View>
       </View>
 
-      {phone && phone.length > 0 && phone.length !== 10 && (
+      {showPhoneError && (
         <Text style={styles.phoneError}>
           Please enter a valid 10-digit mobile number
         </Text>
-      )}
-
-      {/* Suggestions list */}
-      {showSuggestions && (
-        <View style={styles.suggestionsContainer}>
-          {isLoading ? (
-            <View style={styles.suggestionsHeader}>
-              <Text style={styles.suggestionsTitle}>
-                Searching customers...
-              </Text>
-              <ActivityIndicator size="small" color="#0064c2" />
-            </View>
-          ) : suggestions.length > 0 ? (
-            <>
-              <View style={styles.suggestionsHeader}>
-                <Text style={styles.suggestionsTitle}>
-                  Customers Found ({suggestions.length})
-                </Text>
-                <Pressable
-                  onPress={clearSuggestions}
-                  style={styles.clearSuggestionsButton}
-                >
-                  <Text style={styles.clearSuggestionsText}>
-                    ✕
-                  </Text>
-                </Pressable>
-              </View>
-              <ScrollView style={styles.suggestionsList}>
-                {suggestions.map((customer, index) => {
-                  const fullName = `${customer.firstName} ${customer.lastName}`.trim();
-                  return (
-                    <Pressable
-                      key={customer.id || index}
-                      onPress={() =>
-                        handleSuggestionClick(customer)
-                      }
-                      style={styles.suggestionRow}
-                    >
-                      <View style={styles.suggestionTextWrapper}>
-                        <Text style={styles.suggestionName}>
-                          {fullName || 'No Name'}
-                        </Text>
-                        <Text style={styles.suggestionPhone}>
-                          {customer.mobileNum}
-                        </Text>
-                        {customer.emailId ? (
-                          <Text style={styles.suggestionEmail}>
-                            {customer.emailId}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </>
-          ) : (name.length >= 2 || phone.length >= 3) && !isLoading ? (
-            <View>
-              <View style={styles.suggestionsHeader}>
-                <Text style={styles.suggestionsTitle}>
-                  No customers found
-                </Text>
-                <Pressable
-                  onPress={clearSuggestions}
-                  style={styles.clearSuggestionsButton}
-                >
-                  <Text style={styles.clearSuggestionsText}>
-                    ✕
-                  </Text>
-                </Pressable>
-              </View>
-              <View style={styles.noResultsBody}>
-                <Text style={styles.noResultsText}>
-                  Try searching with a different name or phone
-                  number
-                </Text>
-              </View>
-            </View>
-          ) : null}
-        </View>
       )}
 
       {/* GST dialog */}

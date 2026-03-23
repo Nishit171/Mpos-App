@@ -231,6 +231,25 @@ export default function QuickBillingCheckout({
   }, [paymentResponse]);
 
   useEffect(() => {
+    if (!isCartEmpty) return;
+
+    // Reset payment-entry UI when cart is cleared (e.g. "Clear All").
+    setTempAmount('');
+    setTempCreditNoteNumber('');
+    setTempSelectedMethod('');
+    setIsEditingMode(false);
+    setEditingPaymentIndex(null);
+
+    if (selectedPaymentMethods.length > 0) {
+      setSelectedPaymentMethods([]);
+    }
+  }, [
+    isCartEmpty,
+    selectedPaymentMethods.length,
+    setSelectedPaymentMethods,
+  ]);
+
+  useEffect(() => {
     const storedOrgName = null;
     const storedStoreName = null;
     if (storedOrgName) setOrgName(storedOrgName);
