@@ -1,10 +1,35 @@
 import React from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import {
+  View,
+  ActivityIndicator,
+  StyleSheet,
+  ScrollView,
+  FlatList,
+  SectionList,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import QuickBillingHomePage from "./src/components/sections/quick-billing/QuickBillingHomePage";
 import LoginComponent from "./src/components/sections/login/login-component";
 import { CartProvider } from "./src/context/cart-context";
 import { AuthProvider, useAuth } from "./src/context/auth-context";
+
+// Global keyboard/tap behavior:
+// first tap should go to the pressed control instead of only dismissing keyboard.
+const ensureKeyboardTapBehavior = () => {
+  const applyDefault = (Component: any) => {
+    Component.defaultProps = {
+      ...(Component.defaultProps || {}),
+      keyboardShouldPersistTaps:
+        Component.defaultProps?.keyboardShouldPersistTaps || "handled",
+    };
+  };
+
+  applyDefault(ScrollView);
+  applyDefault(FlatList);
+  applyDefault(SectionList);
+};
+
+ensureKeyboardTapBehavior();
 
 function RootNavigator() {
   const { user, isLoading } = useAuth();

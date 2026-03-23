@@ -47,8 +47,14 @@ export const loginWithOtp = async (RMN: string, OTP: string) => {
     const data = await response.json();
     console.log("LOGIN RESPONSE RAW:", data);
 
-    // Try to extract token and org details from common shapes
-    const user = (data && (data.user || data.data?.user)) || {};
+    // Try to extract token and org details from common shapes.
+    // Some backends return org/store fields at the top-level (no `user` object),
+    // so we fall back to `data` itself when nested user is missing.
+    const user =
+      (data && (data.user || data.data?.user)) || data || {};
+    console.log("LOGIN USER OBJECT:", data?.user || data?.data?.user);
+    console.log("LOGIN orgName:", user?.orgName);
+    console.log("LOGIN storeName:", user?.storeName);
     const token =
       data?.token ||
       data?.accessToken ||

@@ -106,6 +106,7 @@ export default function QuickBillingCartTable({
         keyExtractor={item => String(item.id)}
         contentContainerStyle={styles.listContent}
         scrollEnabled={false}
+        keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => {
           const lineTotal = getEffectivePrice(item) * (item.quantity || 0);
           const imageUri = resolveImageUrl(item) || undefined;

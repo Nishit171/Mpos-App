@@ -82,6 +82,7 @@ const OrderTabsBar: React.FC<OrderTabsBarProps> = ({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.tabsScrollContent}
       >
         {orders.map((order, index) => {
@@ -736,6 +737,7 @@ export default function QuickBillingHomePage(
         <ScrollView
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
           {activeOrder && (
             <View style={styles.sectionContainer}>

@@ -236,6 +236,12 @@ export default function QuickBillingSearchBar({
 
   return (
     <View style={styles.container}>
+      {showSuggestions && suggestions.length > 0 && (
+        <Pressable
+          style={styles.suggestionsOutsideOverlay}
+          onPress={() => setShowSuggestions(false)}
+        />
+      )}
       <View style={styles.searchBarContainer}>
         <View style={styles.searchInputWrapper}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -286,7 +292,7 @@ export default function QuickBillingSearchBar({
             </View>
           )}
           {!loading && (
-            <ScrollView>
+            <ScrollView keyboardShouldPersistTaps="handled">
               {suggestions.map(product => {
                 const availableQty =
                   Number(product.remainingqty) || 0;
@@ -541,6 +547,7 @@ export default function QuickBillingSearchBar({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+    position: 'relative',
   },
   searchBarContainer: {
     width: '100%',
@@ -580,6 +587,18 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     backgroundColor: '#ffffff',
     maxHeight: 280,
+    zIndex: 10,
+    elevation: 10,
+  },
+  suggestionsOutsideOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 5,
+    elevation: 5,
   },
   loadingRow: {
     flexDirection: 'row',

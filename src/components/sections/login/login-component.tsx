@@ -168,7 +168,10 @@ const LoginComponent = () => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.card}>
         {/* Header */}
         <View style={styles.header}>

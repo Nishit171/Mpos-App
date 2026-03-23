@@ -11,9 +11,12 @@ import {
   Modal,
   Linking,
   Dimensions,
+  Image,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../../../context/cart-context';
+import { useAuth } from '../../../context/auth-context';
 import { saveCustomer } from '../../../services/api/customerService';
 import {
   validateCreditNote,
@@ -153,6 +156,8 @@ export default function QuickBillingCheckout({
   const [isCartManuallyCleared, setIsCartManuallyCleared] =
     useState(false);
 
+  const { user: authUser } = useAuth();
+
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountType, setDiscountType] = useState<
@@ -174,7 +179,7 @@ export default function QuickBillingCheckout({
   // `cartItems` can come from `refreshedCart?.cartItem` (server-calculated line totals).
   // In that case, `netPrice` is already the per-line total, so we must NOT multiply by `quantity` again.
   const isUsingRefreshedCart = !!refreshedCart?.cartItem;
-  const grossTotal = isCartEmpty
+  const lineItemsTotal = isCartEmpty
     ? 0
     : (cartItems ?? []).reduce(
         (sum, item) => {
@@ -198,6 +203,12 @@ export default function QuickBillingCheckout({
     : typeof discounts === 'object' && discounts.discAmount
     ? discounts.discAmount
     : 0;
+  // When refreshed cart is active, line item totals can already be post-discount.
+  // Reconstruct gross so discount is applied exactly once in netTotal.
+  const grossTotal =
+    isUsingRefreshedCart && computedDiscountAmount > 0
+      ? lineItemsTotal + computedDiscountAmount
+      : lineItemsTotal;
   const netTotal = isCartEmpty
     ? 0
     : Math.max(0, grossTotal - computedDiscountAmount);
@@ -217,18 +228,45 @@ export default function QuickBillingCheckout({
   const invoicePdfUri =
     typeof invoicePdfUrl === 'string' ? invoicePdfUrl.trim() : '';
   const hasInvoicePreview = invoicePdfUri.length > 0;
-  /** Google embedded viewer so Android WebView can show PDFs in-app (direct PDF URIs often trigger download). */
   const invoicePreviewWebUri = invoicePdfUri
     ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
         invoicePdfUri,
       )}`
     : '';
+  const invoicePreviewHtml = invoicePreviewWebUri
+    ? `<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #fff; }
+      iframe { border: 0; width: 100%; height: 100%; }
+    </style>
+  </head>
+  <body>
+    <iframe src="${invoicePreviewWebUri}" allowfullscreen></iframe>
+  </body>
+</html>`
+    : '';
+  const [invoicePreviewMode, setInvoicePreviewMode] = useState<
+    'google' | 'direct'
+  >('google');
 
   useEffect(() => {
     if (paymentResponse && paymentResponse.success) {
       setIsModalOpen(true);
+      setInvoicePreviewMode('google');
     }
   }, [paymentResponse]);
+
+  useEffect(() => {
+    // Keep amount in sync with payable amount when a method is selected.
+    // This prevents stale values (e.g. old pre-discount amount) from lingering.
+    if (!tempSelectedMethod || isEditingMode) return;
+    setTempAmount(
+      remainingAmount > 0 ? remainingAmount.toFixed(2) : '',
+    );
+  }, [remainingAmount, tempSelectedMethod, isEditingMode]);
 
   useEffect(() => {
     if (!isCartEmpty) return;
@@ -250,11 +288,28 @@ export default function QuickBillingCheckout({
   ]);
 
   useEffect(() => {
-    const storedOrgName = null;
-    const storedStoreName = null;
-    if (storedOrgName) setOrgName(storedOrgName);
-    if (storedStoreName) setStoreName(storedStoreName);
-  }, []);
+    const loadStoreInfo = async () => {
+      try {
+        const storedOrgName = await AsyncStorage.getItem('orgName');
+        const storedStoreName = await AsyncStorage.getItem('storeName');
+
+        if (storedOrgName) setOrgName(storedOrgName);
+        if (storedStoreName) setStoreName(storedStoreName);
+      } catch (error) {
+        // Keep silent: e-bill button is gated on store/org names.
+        console.warn('Failed to load store info', error);
+      }
+    };
+
+    // Prefer authenticated user fields (should be set on login).
+    if (authUser?.orgName) setOrgName(String(authUser.orgName));
+    if (authUser?.storeName) setStoreName(String(authUser.storeName));
+
+    // Fallback to AsyncStorage if user fields are not present yet.
+    if (!authUser?.orgName || !authUser?.storeName) {
+      loadStoreInfo();
+    }
+  }, [authUser]);
 
   useEffect(() => {
     const fetchUpiIdOnce = async () => {
@@ -784,6 +839,40 @@ export default function QuickBillingCheckout({
     }
   };
 
+  const shouldShowEbill =
+    !(
+      isSendingEbill ||
+      !customerPhone ||
+      !(storeName || orgName) ||
+      !invoicePdfUri
+    );
+
+  const parsedTempAmount = Number(tempAmount);
+  const shouldIncludeUpiAmount =
+    Number.isFinite(parsedTempAmount) && parsedTempAmount > 0;
+  const upiPayUri = systemUpiId
+    ? `upi://pay?pa=${encodeURIComponent(
+        systemUpiId,
+      )}&pn=${encodeURIComponent(
+        storeName || orgName || 'Store',
+      )}${shouldIncludeUpiAmount ? `&am=${parsedTempAmount.toFixed(2)}` : ''}&cu=INR`
+    : '';
+  const upiQrImageUrl = upiPayUri
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+        upiPayUri,
+      )}`
+    : '';
+
+  // Diagnostics: why E-bill button isn't rendering
+  console.log('EBILL DEBUG', {
+    isSendingEbill,
+    customerPhone,
+    storeName,
+    orgName,
+    invoicePdfUri,
+  });
+  console.log('EBILL SHOULD SHOW:', shouldShowEbill);
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -995,12 +1084,21 @@ export default function QuickBillingCheckout({
                 <View style={styles.fieldGroup}>
                   {systemUpiId ? (
                     <View style={styles.upiBox}>
-                      <Text style={styles.upiLabel}>
-                        Store UPI ID
+                      <Text style={styles.upiQrHelpText}>
+                        Scan to pay via UPI
                       </Text>
-                      <Text style={styles.upiValue}>
-                        {systemUpiId}
-                      </Text>
+                      {upiQrImageUrl ? (
+                        <Image
+                          source={{ uri: upiQrImageUrl }}
+                          style={styles.upiQrImage}
+                          resizeMode="contain"
+                        />
+                      ) : null}
+                      <View style={styles.upiIdBadge}>
+                        <Text style={styles.upiValue}>
+                          Store UPI: {systemUpiId}
+                        </Text>
+                      </View>
                       <Text style={styles.upiHint}>
                         Ask customer to pay using this UPI ID
                       </Text>
@@ -1311,9 +1409,13 @@ export default function QuickBillingCheckout({
               {hasInvoicePreview ? (
                 <View style={styles.invoiceWebViewContainer}>
                   <WebView
-                    key={invoicePdfUri}
+                    key={`${invoicePreviewMode}-${invoicePdfUri}`}
                     originWhitelist={['*']}
-                    source={{ uri: invoicePreviewWebUri }}
+                    source={
+                      invoicePreviewMode === 'google'
+                        ? { html: invoicePreviewHtml }
+                        : { uri: invoicePdfUri }
+                    }
                     style={styles.invoiceWebView}
                     javaScriptEnabled
                     domStorageEnabled
@@ -1322,6 +1424,16 @@ export default function QuickBillingCheckout({
                     scrollEnabled
                     nestedScrollEnabled
                     mixedContentMode="always"
+                    onError={() => {
+                      if (invoicePreviewMode === 'google') {
+                        setInvoicePreviewMode('direct');
+                      }
+                    }}
+                    onHttpError={() => {
+                      if (invoicePreviewMode === 'google') {
+                        setInvoicePreviewMode('direct');
+                      }
+                    }}
                   />
                 </View>
               ) : (
@@ -1339,7 +1451,7 @@ export default function QuickBillingCheckout({
                   style={styles.invoiceButton}
                 >
                   <Text style={styles.invoiceButtonText}>
-                    Open PDF
+                    Download
                   </Text>
                 </Pressable>
                 <Pressable
@@ -1607,6 +1719,29 @@ const styles = StyleSheet.create({
     borderColor: '#facc15',
     backgroundColor: '#fef9c3',
     padding: 8,
+    alignItems: 'center',
+  },
+  upiQrHelpText: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 6,
+  },
+  upiQrImage: {
+    width: 140,
+    height: 140,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  upiIdBadge: {
+    marginTop: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#facc15',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   upiLabel: {
     fontSize: 11,

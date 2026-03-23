@@ -133,6 +133,7 @@ export default function OrderTabs({
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.tabsScrollView}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.tabsContent}
         >
           {orders.map((order, idx) => {

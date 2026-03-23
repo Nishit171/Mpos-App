@@ -137,7 +137,10 @@ export default function ProductDetailModal({
           </Pressable>
 
           {/* Scrollable Content */}
-          <ScrollView style={styles.scrollContent}>
+          <ScrollView
+            style={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Product Image */}
             <View style={styles.imageContainer}>
               {discountPercentage > 0 && (

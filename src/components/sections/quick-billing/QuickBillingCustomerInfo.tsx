@@ -129,14 +129,11 @@ export default function QuickBillingCustomerInfo({
             <Text style={styles.suggestionsTitle}>
               Customers Found ({suggestions.length})
             </Text>
-            <Pressable
-              onPress={clearSuggestions}
-              style={styles.clearSuggestionsButton}
-            >
-              <Text style={styles.clearSuggestionsText}>✕</Text>
-            </Pressable>
           </View>
-          <ScrollView style={styles.suggestionsList}>
+          <ScrollView
+            style={styles.suggestionsList}
+            keyboardShouldPersistTaps="handled"
+          >
             {suggestions.map((customer, index) => {
               const fullName = `${customer.firstName} ${customer.lastName}`.trim();
               return (
@@ -167,12 +164,6 @@ export default function QuickBillingCustomerInfo({
         <View>
           <View style={styles.suggestionsHeader}>
             <Text style={styles.suggestionsTitle}>No customers found</Text>
-            <Pressable
-              onPress={clearSuggestions}
-              style={styles.clearSuggestionsButton}
-            >
-              <Text style={styles.clearSuggestionsText}>✕</Text>
-            </Pressable>
           </View>
           <View style={styles.noResultsBody}>
             <Text style={styles.noResultsText}>
@@ -267,6 +258,19 @@ export default function QuickBillingCustomerInfo({
       <Text style={styles.title}>Customer Information</Text>
 
       <View style={styles.customerSection}>
+        {(showBillTypeDropdown || showSuggestions) && (
+          <Pressable
+            style={styles.outsideTapOverlay}
+            onPress={() => {
+              if (showBillTypeDropdown) {
+                setShowBillTypeDropdown(false);
+              }
+              if (showSuggestions) {
+                clearSuggestions();
+              }
+            }}
+          />
+        )}
         {/* Phone */}
         <View style={styles.fieldRow}>
           <View style={styles.inputGroup}>
@@ -496,6 +500,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     overflow: 'visible',
+    position: 'relative',
   },
   title: {
     fontSize: 14,
@@ -507,6 +512,16 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 12,
     width: '100%',
+  },
+  outsideTapOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 5,
+    elevation: 5,
   },
   fieldRow: {
     width: '100%',
@@ -553,6 +568,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     zIndex: 1000,
     elevation: 10,
+  },
+  billTypeOutsideOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 5,
+    elevation: 5,
   },
   billTypeButton: {
     padding: 0,
@@ -655,6 +680,8 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     backgroundColor: '#ffffff',
     maxHeight: 260,
+    zIndex: 10,
+    elevation: 10,
   },
   suggestionsHeader: {
     flexDirection: 'row',

@@ -15,6 +15,8 @@ import {
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { check, request, PERMISSIONS, RESULTS, PermissionStatus } from 'react-native-permissions';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { launchImageLibrary } from 'react-native-image-picker';
+import BarcodeScanning from '@react-native-ml-kit/barcode-scanning';
 import { getMultipleProducts } from '../../../services/api/productService';
 
 const FALLBACK_IMAGE = require('../../../assets/noImage.png');
@@ -72,6 +74,7 @@ export default function BarcodeDialog({
   const [scanLocked, setScanLocked] = useState(false);
   const scanLockedRef = useRef(false);
   const [cameraPermission, setCameraPermission] = useState<PermissionStatus | null>(null);
+  const [uploadedImageUri, setUploadedImageUri] = useState<string | null>(null);
 
   const device = useCameraDevice('back');
   const cameraRef = useRef<Camera>(null);
@@ -135,6 +138,7 @@ export default function BarcodeDialog({
     setShouldAutoAdd(false);
     setScanLocked(false);
     scanLockedRef.current = false;
+    setUploadedImageUri(null);
   }, []);
 
   const handleScanSuccess = useCallback(
@@ -312,6 +316,50 @@ export default function BarcodeDialog({
     }
   };
 
+  const handleUploadImage = async () => {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+      });
+
+      if (result.didCancel) return;
+
+      const picked = result.assets?.[0]?.uri;
+      if (!picked) {
+        Alert.alert('Upload failed', 'Unable to read selected image.');
+        return;
+      }
+
+      setUploadedImageUri(picked);
+      setScanState('processing');
+
+      const barcodes = await BarcodeScanning.scan(picked);
+      const scannedCode =
+        Array.isArray(barcodes) && barcodes.length > 0
+          ? barcodes[0]?.value
+          : '';
+
+      if (!scannedCode) {
+        setScanState('error');
+        setError('No barcode found in uploaded image.');
+        Alert.alert(
+          'No barcode found',
+          'Could not detect a barcode in the selected image.',
+        );
+        return;
+      }
+
+      // Route uploaded-image result through the same flow as camera scan.
+      handleScanSuccess(String(scannedCode));
+    } catch (error) {
+      console.error('Image upload error:', error);
+      Alert.alert('Upload failed', 'Failed to pick image. Please try again.');
+      setScanState('error');
+      setError('Failed to scan barcode from image.');
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setShowScanner(true);
@@ -432,6 +480,23 @@ export default function BarcodeDialog({
                   </>
                 )}
               </View>
+              <Pressable
+                style={styles.uploadImageButton}
+                onPress={handleUploadImage}
+              >
+                <Icon name="photo-library" size={18} color="#0064c2" />
+                <Text style={styles.uploadImageButtonText}>Upload Image</Text>
+              </Pressable>
+              {uploadedImageUri ? (
+                <View style={styles.uploadedPreviewCard}>
+                  <Text style={styles.uploadedPreviewTitle}>Selected image</Text>
+                  <Image
+                    source={{ uri: uploadedImageUri }}
+                    style={styles.uploadedPreviewImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              ) : null}
               {scanState === 'success' && (
                 <View style={styles.successContainer}>
                   <Text style={styles.successText}>
@@ -511,7 +576,10 @@ export default function BarcodeDialog({
 
           {/* Search Results Section */}
           {!barcodeOnly && hasSearched && (
-            <ScrollView style={styles.resultsContainer}>
+            <ScrollView
+              style={styles.resultsContainer}
+              keyboardShouldPersistTaps="handled"
+            >
               {loading && (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#0064c2" />
@@ -707,6 +775,40 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 8,
+  },
+  uploadImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  uploadImageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0064c2',
+  },
+  uploadedPreviewCard: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    padding: 10,
+  },
+  uploadedPreviewTitle: {
+    fontSize: 12,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  uploadedPreviewImage: {
+    width: '100%',
+    height: 140,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
   },
   successContainer: {
     backgroundColor: '#d1fae5',
