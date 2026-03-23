@@ -10,7 +10,9 @@ import {
   Alert,
   Modal,
   Linking,
+  Dimensions,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { useCart } from '../../../context/cart-context';
 import { saveCustomer } from '../../../services/api/customerService';
 import {
@@ -210,6 +212,17 @@ export default function QuickBillingCheckout({
   const isPaymentComplete = isCartEmpty
     ? false
     : Math.abs(remainingAmount) < 0.01;
+
+  const invoicePdfUrl = paymentResponse?.data?.invoicePdfUrl;
+  const invoicePdfUri =
+    typeof invoicePdfUrl === 'string' ? invoicePdfUrl.trim() : '';
+  const hasInvoicePreview = invoicePdfUri.length > 0;
+  /** Google embedded viewer so Android WebView can show PDFs in-app (direct PDF URIs often trigger download). */
+  const invoicePreviewWebUri = invoicePdfUri
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
+        invoicePdfUri,
+      )}`
+    : '';
 
   useEffect(() => {
     if (paymentResponse && paymentResponse.success) {
@@ -679,8 +692,7 @@ export default function QuickBillingCheckout({
   };
 
   const printReceipt = async () => {
-    const pdfUrl = paymentResponse?.data?.invoicePdfUrl;
-    if (!pdfUrl) {
+    if (!invoicePdfUri) {
       Alert.alert(
         'Invoice unavailable',
         'Invoice not available for printing',
@@ -688,7 +700,7 @@ export default function QuickBillingCheckout({
       return;
     }
     try {
-      await Linking.openURL(pdfUrl);
+      await Linking.openURL(invoicePdfUri);
     } catch (error) {
       console.error('Print error:', error);
       Alert.alert('Error', 'Failed to open invoice URL');
@@ -699,7 +711,7 @@ export default function QuickBillingCheckout({
     if (isSendingEbill) return;
     setIsSendingEbill(true);
     try {
-      const billLink = paymentResponse?.data?.invoicePdfUrl;
+      const billLink = invoicePdfUri || paymentResponse?.data?.invoicePdfUrl;
       if (!customerPhone) {
         Alert.alert(
           'Missing phone',
@@ -1277,18 +1289,34 @@ export default function QuickBillingCheckout({
                 </Text>
               </View>
 
-              <View style={styles.invoiceInfoBlock}>
-                <Text style={styles.invoiceInfoText}>
-                  Invoice preview is not available inside the app. Use the
-                  buttons below to open or share the invoice PDF.
-                </Text>
-              </View>
+              {hasInvoicePreview ? (
+                <View style={styles.invoiceWebViewContainer}>
+                  <WebView
+                    key={invoicePdfUri}
+                    originWhitelist={['*']}
+                    source={{ uri: invoicePreviewWebUri }}
+                    style={styles.invoiceWebView}
+                    javaScriptEnabled
+                    domStorageEnabled
+                    startInLoadingState
+                    scalesPageToFit
+                    scrollEnabled
+                    nestedScrollEnabled
+                    mixedContentMode="always"
+                  />
+                </View>
+              ) : (
+                <View style={styles.invoiceInfoBlock}>
+                  <Text style={styles.invoiceInfoText}>
+                    Invoice preview is not available inside the app. Use the
+                    buttons below to open or share the invoice PDF.
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.invoiceButtonsRow}>
                 <Pressable
-                  onPress={() =>
-                    downloadReceipt(paymentResponse?.data?.invoicePdfUrl)
-                  }
+                  onPress={() => downloadReceipt(invoicePdfUri || undefined)}
                   style={styles.invoiceButton}
                 >
                   <Text style={styles.invoiceButtonText}>
@@ -1307,7 +1335,7 @@ export default function QuickBillingCheckout({
                   isSendingEbill ||
                   !customerPhone ||
                   !(storeName || orgName) ||
-                  !paymentResponse?.data?.invoicePdfUrl
+                  !invoicePdfUri
                 ) && (
                   <Pressable
                     onPress={handleSendEbill}
@@ -1793,7 +1821,20 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   invoiceScroll: {
-    maxHeight: 420,
+    maxHeight: Math.min(Dimensions.get('window').height * 0.82, 720),
+  },
+  invoiceWebViewContainer: {
+    height: 420,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f9fafb',
+  },
+  invoiceWebView: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   invoiceScrollContent: {
     paddingTop: 8,
