@@ -16,6 +16,7 @@ import QuickBillingCheckout, { PaymentMethodData } from './QuickBillingCheckout'
 import QuickBillingCustomerInfo from './QuickBillingCustomerInfo';
 import Header from '../home-page/Header';
 import Footer from '../home-page/Footer';
+import ReturnOrderDrawer from '../home-page/ReturnOrderDrawer';
 import BarcodeDialog from '../home-page/BarcodeDialog';
 import QuickBillingAddProductDialog from './QuickBillingAddProductDialog';
 import { useCart } from '../../../context/cart-context';
@@ -147,6 +148,7 @@ export default function QuickBillingHomePage(
   const [billType, setBillType] = useState<BillType>('taxInvoice');
   const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
+  const [returnDrawerOpen, setReturnDrawerOpen] = useState(false);
   const { user, logout } = useAuth();
 
   // Load billType from AsyncStorage on mount
@@ -445,6 +447,25 @@ export default function QuickBillingHomePage(
                 ? { ...item, quantity: item.quantity + quantity }
                 : item,
             );
+
+            const finalCartItem =
+              updatedCart.find((item: any) => item.id === product.id) || null;
+            const refreshCartPayloadCartItem = updatedCart.map(
+              (item: any) => ({
+                ...item,
+                qtyMux: item.qtyMux || '',
+              }),
+            );
+            console.log('ADD TO CART PRODUCT:', {
+              id: product.id,
+              name: product.name,
+              plulink: product.plulink ?? product.imageUrl ?? null,
+              quantityFromProduct: product.quantity,
+              quantityArg: quantity,
+              cartPayload: finalCartItem,
+              finalCartItem,
+              refreshCartPayloadCartItem,
+            });
           } else {
             // Generate random HSN if not provided (for Invoice type)
             const generateRandomHSN = () => {
@@ -490,6 +511,20 @@ export default function QuickBillingHomePage(
               plulink: product.plulink || product.imageUrl || product.image || '',
             };
             updatedCart = [...o.cart, cartItem];
+
+            console.log('ADD TO CART PRODUCT:', {
+              id: product.id,
+              name: product.name,
+              plulink: product.plulink ?? product.imageUrl ?? null,
+              quantityFromProduct: product.quantity,
+              quantityArg: quantity,
+              cartPayload: cartItem,
+              finalCartItem: cartItem,
+              refreshCartPayloadCartItem: updatedCart.map((item: any) => ({
+                ...item,
+                qtyMux: item.qtyMux || '',
+              })),
+            });
           }
           const updatedOrder = { ...o, cart: updatedCart };
           if (o.id === activeOrderId) {
@@ -683,7 +718,8 @@ export default function QuickBillingHomePage(
         user={user ? { userName: (user as any).userName, email: (user as any).email } : undefined}
         logout={logout}
         onReturnOrderClick={() => {
-          // Handle return order click
+          console.log('OPEN RETURN DRAWER');
+          setReturnDrawerOpen(true);
         }}
         onBackClick={props.onBackClick}
       />
@@ -793,6 +829,15 @@ export default function QuickBillingHomePage(
           setShowAddProductDialog(false);
         }}
         billType={billType}
+      />
+
+      <ReturnOrderDrawer
+        open={returnDrawerOpen}
+        onClose={() => setReturnDrawerOpen(false)}
+        onGoHome={() => {
+          setReturnDrawerOpen(false);
+          props.onBackClick?.();
+        }}
       />
     </View>
   );

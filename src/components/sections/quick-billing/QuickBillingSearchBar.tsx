@@ -90,6 +90,27 @@ export default function QuickBillingSearchBar({
     setLoading(true);
     try {
       const result = await searchProducts(term);
+
+      // Instrumentation: capture raw backend response + quantity fields.
+      // This helps debug cases where stock/remaining quantity becomes incorrect.
+      console.log('PRODUCT SEARCH RAW RESPONSE:', {
+        term,
+        success: result.success,
+        rawData: result.data,
+      });
+      const rawCartItems = result.data?.cartItem;
+      if (Array.isArray(rawCartItems)) {
+        rawCartItems.slice(0, 10).forEach((item: any) => {
+          console.log('PRODUCT SEARCH RESULT:', {
+            id: item?.id ?? item?.sku,
+            name: item?.name ?? 'No Name',
+            quantityFromAPI: item?.quantity ?? item?.remainingqty,
+            remainingqtyFromAPI: item?.remainingqty,
+            rawItem: item,
+          });
+        });
+      }
+
       if (
         result.success &&
         result.data &&
@@ -130,6 +151,15 @@ export default function QuickBillingSearchBar({
             remainingqty: item.remainingqty || '0',
             size: item.size || '',
           }),
+        );
+        console.log(
+          'PRODUCT SEARCH MAPPED PRODUCTS:',
+          mappedProducts.slice(0, 10).map((p: Product) => ({
+          id: p.id,
+          name: p.name,
+          remainingqty: p.remainingqty,
+          price: p.price,
+          })),
         );
         setSuggestions(mappedProducts.slice(0, 10));
         setShowSuggestions(true);

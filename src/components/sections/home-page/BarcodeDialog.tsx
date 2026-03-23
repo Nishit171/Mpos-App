@@ -29,6 +29,8 @@ interface Product {
   unit: string;
   category: string;
   sku?: string;
+  qtyMux?: string;
+  remainingqty?: string;
 }
 
 interface BarcodeDialogProps {
@@ -67,6 +69,8 @@ export default function BarcodeDialog({
   const [showScanner, setShowScanner] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [shouldAutoAdd, setShouldAutoAdd] = useState(false);
+  const [scanLocked, setScanLocked] = useState(false);
+  const scanLockedRef = useRef(false);
   const [cameraPermission, setCameraPermission] = useState<PermissionStatus | null>(null);
 
   const device = useCameraDevice('back');
@@ -129,10 +133,20 @@ export default function BarcodeDialog({
     setShowScanner(false);
     setTorchEnabled(false);
     setShouldAutoAdd(false);
+    setScanLocked(false);
+    scanLockedRef.current = false;
   }, []);
 
   const handleScanSuccess = useCallback(
     (decodedText: string) => {
+      if (scanLockedRef.current) return;
+      scanLockedRef.current = true;
+      setScanLocked(true);
+      setTimeout(() => {
+        scanLockedRef.current = false;
+        setScanLocked(false);
+      }, 500);
+
       console.log('BARCODE RECEIVED:', decodedText);
       const processedBarcode = decodedText.includes('ST')
         ? decodedText.split('ST')[0]
@@ -146,9 +160,8 @@ export default function BarcodeDialog({
         onClose();
         return;
       }
-      setTimeout(() => {
-        searchProductsByBarcode(processedBarcode, autoAdd);
-      }, 500);
+      // Immediately kick off barcode lookup; duplicates are handled by `scanLockedRef`.
+      searchProductsByBarcode(processedBarcode, autoAdd);
     },
     [autoAdd, barcodeOnly, onSubmit, onClose],
   );
@@ -159,7 +172,9 @@ export default function BarcodeDialog({
   ) => {
     setLoading(true);
     setError(null);
-    setHasSearched(true);
+    // For single-result scans we will auto-add and immediately close, so
+    // avoid showing the suggestions/no-results UI.
+    setHasSearched(false);
 
     try {
       const result = await getMultipleProducts([barcodeData]);
@@ -182,21 +197,40 @@ export default function BarcodeDialog({
           unit: item.qtyunit || '',
           category: item.deptNmbr || '',
           sku: item.sku || item.id || '',
+          qtyMux: item.qtyMux || '',
+          remainingqty: item.remainingqty || '0',
         }));
+        // POS behavior: when exactly one product matches, auto-add immediately
+        // and never render the suggestions list UI.
+        if (mappedProducts.length === 1) {
+          const product = mappedProducts[0];
+          setShouldAutoAdd(false);
+          setProducts([]);
+          console.log('BARCODE AUTO ADD:', {
+            productId: product.id,
+            productName: product.name,
+            barcode: barcodeData,
+          });
+
+          handleAddToCart(product, { closeDelayMs: 0 });
+          return;
+        }
+
+        // Multiple matches: show suggestions list for manual selection.
         setProducts(mappedProducts);
         setError(null);
-
-        if (autoAdd && mappedProducts.length > 0) {
-          setShouldAutoAdd(true);
-        }
+        setShouldAutoAdd(false);
+        setHasSearched(true);
       } else {
         setProducts([]);
         setError('No products found for this barcode.');
+        setHasSearched(true);
       }
     } catch (error) {
       console.error('Barcode search error:', error);
       setProducts([]);
       setError('Failed to search products. Please try again later.');
+      setHasSearched(true);
     } finally {
       setLoading(false);
     }
@@ -213,7 +247,7 @@ export default function BarcodeDialog({
   };
 
   const handleAddToCart = useCallback(
-    (product: Product) => {
+    (product: Product, opts: { closeDelayMs?: number } = {}) => {
       if (!onAddToCart) return;
     const cartItem = {
       id: product.id,
@@ -223,14 +257,17 @@ export default function BarcodeDialog({
       MRP: product.originalPrice,
       netPrice: product.price,
       quantity: 1,
+      qtyMux: product.qtyMux || '',
+      remainingqty: product.remainingqty || '0',
       imageUrl: product.image || '',
       plulink: product.image || '',
       };
       onAddToCart(cartItem, 1);
-    setTimeout(() => {
+      const closeDelayMs = opts.closeDelayMs ?? 300;
+      setTimeout(() => {
         resetState();
         onClose();
-      }, 300);
+      }, closeDelayMs);
     },
     [onAddToCart, resetState, onClose],
   );

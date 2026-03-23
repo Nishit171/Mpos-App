@@ -129,6 +129,7 @@ export default function Header({
   };
 
   const handleReturnClick = () => {
+    console.log('RETURN BUTTON PRESSED');
     if (onReturnOrderClick) onReturnOrderClick();
   };
 
