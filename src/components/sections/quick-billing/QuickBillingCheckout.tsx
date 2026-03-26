@@ -22,7 +22,7 @@ import {
   validateCreditNote,
   getUpiId,
   placeOrder,
-  sendEbill,
+  sendLumeEbill,
   orderPayment,
   refreshCart,
 } from '../../../services/api/orderService';
@@ -223,6 +223,11 @@ export default function QuickBillingCheckout({
   const isPaymentComplete = isCartEmpty
     ? false
     : Math.abs(remainingAmount) < 0.01;
+  const effectiveOrderId =
+    orderId ||
+    paymentResponse?.data?.orderId ||
+    paymentResponse?.data?.order_id ||
+    null;
 
   const invoicePdfUrl = paymentResponse?.data?.invoicePdfUrl;
   const invoicePdfUri =
@@ -785,39 +790,14 @@ export default function QuickBillingCheckout({
     if (isSendingEbill) return;
     setIsSendingEbill(true);
     try {
-      const billLink = invoicePdfUri || paymentResponse?.data?.invoicePdfUrl;
-      if (!customerPhone) {
+      if (!effectiveOrderId) {
         Alert.alert(
-          'Missing phone',
-          'Customer phone number is not available for sending e-bill.',
+          'Missing order ID',
+          'Order ID is not available for sending e-bill. Please complete the payment first.',
         );
         return;
       }
-      const storeNameOrOrg = storeName || orgName;
-      if (!storeNameOrOrg) {
-        Alert.alert(
-          'Missing store',
-          'Store name is not available for sending e-bill. Please log in again.',
-        );
-        return;
-      }
-      if (!billLink) {
-        Alert.alert(
-          'Missing bill link',
-          'Bill link is not available. Please complete the payment first.',
-        );
-        return;
-      }
-      const phoneNumber =
-        customerPhone.replace(/\D/g, '').replace(/^91/, '') ||
-        customerPhone;
-      const payload = {
-        phoneNumber,
-        billUrl: billLink,
-        storeName: storeNameOrOrg,
-        name: customerName?.trim() || 'Customer',
-      };
-      const response = await sendEbill(payload);
+      const response = await sendLumeEbill(String(effectiveOrderId));
       if (response.success) {
         Alert.alert('Success', 'E-bill sent successfully!');
       } else {
@@ -839,13 +819,7 @@ export default function QuickBillingCheckout({
     }
   };
 
-  const shouldShowEbill =
-    !(
-      isSendingEbill ||
-      !customerPhone ||
-      !(storeName || orgName) ||
-      !invoicePdfUri
-    );
+  const shouldShowEbill = !(isSendingEbill || !effectiveOrderId);
 
   const parsedTempAmount = Number(tempAmount);
   const shouldIncludeUpiAmount =
@@ -866,10 +840,7 @@ export default function QuickBillingCheckout({
   // Diagnostics: why E-bill button isn't rendering
   console.log('EBILL DEBUG', {
     isSendingEbill,
-    customerPhone,
-    storeName,
-    orgName,
-    invoicePdfUri,
+    effectiveOrderId,
   });
   console.log('EBILL SHOULD SHOW:', shouldShowEbill);
 
@@ -1464,9 +1435,7 @@ export default function QuickBillingCheckout({
                 </Pressable>
                 {!(
                   isSendingEbill ||
-                  !customerPhone ||
-                  !(storeName || orgName) ||
-                  !invoicePdfUri
+                  !effectiveOrderId
                 ) && (
                   <Pressable
                     onPress={handleSendEbill}

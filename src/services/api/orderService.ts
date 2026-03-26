@@ -2,14 +2,16 @@ import { BASE_URL } from "../constants/config";
 import axios from "axios";
 import { getToken } from "../../utils/storage/tokenStorage";
 
-// Get axios config with auth headers
+// Get axios config with auth headers (Origin/Referer follow API base for local vs deployed)
 const getAxiosConfig = async () => {
   const token = await getToken();
+  const origin = BASE_URL?.replace(/\/$/, "") || "";
   return {
     headers: {
       Authorization: token ? `Bearer ${token}` : "",
       Accept: "application/json, text/plain, */*",
       "Content-Type": "application/json",
+      ...(origin ? { Origin: origin, Referer: `${origin}/` } : {}),
     },
   };
 };
@@ -105,7 +107,7 @@ export const saveUpi = async (upiData: any) => {
   }
 };
 
-// Send e-bill
+// Send e-bill using existing /sendEbill endpoint (legacy)
 export const sendEbill = async (payload: any) => {
   try {
     const token = await getToken();
@@ -120,6 +122,40 @@ export const sendEbill = async (payload: any) => {
   } catch (error) {
     console.error("Error sending e-bill:", error);
     return { success: false, error: "Failed to send e-bill" };
+  }
+};
+
+// Resend e-bill via Lume: POST /lumepos/ws/lumeEbill — body { orderId } only
+export const sendLumeEbill = async (orderId: string) => {
+  try {
+    const axiosConfig = await getAxiosConfig();
+    const response = await axios.post(
+      `${BASE_URL}/lumepos/ws/lumeEbill`,
+      { orderId: String(orderId) },
+      axiosConfig
+    );
+
+    const data = response.data;
+    const success =
+      data?.status === "SUCCESS" ||
+      data?.statusCode === 200 ||
+      data?.status === "success";
+
+    return {
+      success: !!success,
+      data,
+      error: success ? undefined : data?.message,
+    };
+  } catch (error: any) {
+    console.error("Error calling lumeEbill:", error);
+
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      "Failed to send e-bill";
+
+    return { success: false, error: message };
   }
 };
 
