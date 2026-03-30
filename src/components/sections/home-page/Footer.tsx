@@ -1,23 +1,45 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Linking, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import Toast from 'react-native-toast-message';
 
 export default function Footer() {
   const handleEmailPress = () => {
     Linking.openURL('mailto:support@apeirosai.com').catch(() => {
-      Alert.alert('Error', 'Could not open email client');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Could not open email client',
+        position: 'top',
+        visibilityTime: 2500,
+        autoHide: true,
+      });
     });
   };
 
   const handlePhonePress = () => {
     Linking.openURL('tel:+919724151647').catch(() => {
-      Alert.alert('Error', 'Could not open phone dialer');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Could not open phone dialer',
+        position: 'top',
+        visibilityTime: 2500,
+        autoHide: true,
+      });
     });
   };
 
   const handleWebsitePress = () => {
     Linking.openURL('https://apeirosai.com/').catch(() => {
-      Alert.alert('Error', 'Could not open website');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Could not open website',
+        position: 'top',
+        visibilityTime: 2500,
+        autoHide: true,
+      });
     });
   };
 

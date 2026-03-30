@@ -7,7 +7,6 @@ import {
   ScrollView,
   Pressable,
   TouchableOpacity,
-  Alert,
   Modal,
   Linking,
   Dimensions,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Toast from 'react-native-toast-message';
 import { useCart } from '../../../context/cart-context';
 import { useAuth } from '../../../context/auth-context';
 import { saveCustomer } from '../../../services/api/customerService';
@@ -61,6 +61,21 @@ const paymentMethods = [
   { key: 'upi', label: 'UPI', icon: '📱' },
   { key: 'creditNote', label: 'Credit Note', icon: '🏢' },
 ];
+
+const showToast = (
+  type: 'success' | 'error',
+  text1: string,
+  text2?: string,
+) => {
+  Toast.show({
+    type,
+    text1,
+    text2,
+    position: 'top',
+    visibilityTime: 2500,
+    autoHide: true,
+  });
+};
 
 const saveCustomerInfo = async (
   customerName: string,
@@ -357,7 +372,8 @@ export default function QuickBillingCheckout({
 
   const handleAddPaymentMethod = async () => {
     if (!tempSelectedMethod || !tempAmount || Number(tempAmount) <= 0) {
-      Alert.alert(
+      showToast(
+        'error',
         'Payment method required',
         'Please select a payment method and enter a valid amount',
       );
@@ -365,7 +381,8 @@ export default function QuickBillingCheckout({
     }
     const amount = Number(tempAmount);
     if (isNaN(amount)) {
-      Alert.alert(
+      showToast(
+        'error',
         'Invalid amount',
         'Please enter a valid number for the amount.',
       );
@@ -379,7 +396,8 @@ export default function QuickBillingCheckout({
       m => m.method === tempSelectedMethod,
     );
     if (existingMethod) {
-      Alert.alert(
+      showToast(
+        'error',
         'Duplicate method',
         'This payment method is already added. Please remove it first or use a different method.',
       );
@@ -395,7 +413,8 @@ export default function QuickBillingCheckout({
         !validationRes.success ||
         validationRes.data?.status !== 'success'
       ) {
-        Alert.alert(
+        showToast(
+          'error',
           'Invalid credit note',
           validationRes?.data?.status_message ||
             validationRes?.data?.message ||
@@ -445,7 +464,8 @@ export default function QuickBillingCheckout({
       !tempAmount ||
       Number(tempAmount) <= 0
     ) {
-      Alert.alert(
+      showToast(
+        'error',
         'Payment method required',
         'Please select a payment method and enter a valid amount',
       );
@@ -453,7 +473,8 @@ export default function QuickBillingCheckout({
     }
     const amount = Number(tempAmount);
     if (isNaN(amount)) {
-      Alert.alert(
+      showToast(
+        'error',
         'Invalid amount',
         'Please enter a valid number for the amount.',
       );
@@ -463,7 +484,8 @@ export default function QuickBillingCheckout({
       .filter((_, index) => index !== editingPaymentIndex)
       .reduce((sum, method) => sum + method.amount, 0);
     if (otherPaymentMethodsTotal + amount > netTotal) {
-      Alert.alert(
+      showToast(
+        'error',
         'Amount too high',
         `Total payment amount cannot exceed ₹${netTotal.toFixed(
           2,
@@ -530,7 +552,8 @@ export default function QuickBillingCheckout({
           value: discountAmount,
         });
       } else {
-        Alert.alert(
+        showToast(
+          'error',
           'Invalid discount',
           'Please enter a valid discount value',
         );
@@ -543,14 +566,14 @@ export default function QuickBillingCheckout({
         if (onCartRefreshed) {
           onCartRefreshed(result.data);
         }
-        Alert.alert('Success', 'Discount applied successfully');
+        showToast('success', 'Success', 'Discount applied successfully');
       } else {
-        Alert.alert('Error', 'Failed to apply discount');
+        showToast('error', 'Error', 'Failed to apply discount');
         setAppliedDiscount(null);
       }
     } catch (error) {
       console.error('Failed to apply discount:', error);
-      Alert.alert('Error', 'Failed to apply discount');
+      showToast('error', 'Error', 'Failed to apply discount');
       setAppliedDiscount(null);
     } finally {
       setIsApplyingDiscount(false);
@@ -585,13 +608,17 @@ export default function QuickBillingCheckout({
         setAppliedDiscount(null);
         setDiscountPercent(0);
         setDiscountAmount(0);
-        Alert.alert('Success', 'Discount removed successfully');
+        showToast(
+          'success',
+          'Success',
+          'Discount removed successfully',
+        );
       } else {
-        Alert.alert('Error', 'Failed to remove discount');
+        showToast('error', 'Error', 'Failed to remove discount');
       }
     } catch (error) {
       console.error('Failed to remove discount:', error);
-      Alert.alert('Error', 'Failed to remove discount');
+      showToast('error', 'Error', 'Failed to remove discount');
     } finally {
       setIsApplyingDiscount(false);
     }
@@ -617,7 +644,8 @@ export default function QuickBillingCheckout({
 
   const handlePayNow = async () => {
     if (!isPaymentComplete) {
-      Alert.alert(
+      showToast(
+        'error',
         'Payment incomplete',
         'Please ensure the total payment amount matches the required amount',
       );
@@ -645,7 +673,8 @@ export default function QuickBillingCheckout({
             placedOrderId = placeOrderRes.data.order_id;
             setOrderId(placedOrderId);
           } else {
-            Alert.alert(
+            showToast(
+              'error',
               'Error',
               'Failed to place order. Please try again.',
             );
@@ -653,7 +682,8 @@ export default function QuickBillingCheckout({
           }
         } catch (error) {
           console.error('Place order error:', error);
-          Alert.alert(
+          showToast(
+            'error',
             'Error',
             'Failed to place order. Please try again.',
           );
@@ -718,22 +748,31 @@ export default function QuickBillingCheckout({
         );
         if (customerSaveResult.success) {
           if (customerName?.trim() || customerPhone?.trim()) {
-            Alert.alert(
+            showToast(
+              'success',
               'Payment successful',
               'Payment successful! Customer info saved.',
             );
           } else {
-            Alert.alert('Payment successful', 'Payment successful!');
+            showToast(
+              'success',
+              'Payment successful',
+              'Payment successful!',
+            );
           }
         } else {
-          Alert.alert('Payment successful', 'Payment successful!');
+          showToast(
+            'success',
+            'Payment successful',
+            'Payment successful!',
+          );
         }
       } else {
-        Alert.alert('Payment failed', 'Please try again.');
+        showToast('error', 'Payment failed', 'Please try again.');
       }
     } catch (error) {
       console.error('Payment error:', error);
-      Alert.alert('Payment failed', 'Please try again.');
+      showToast('error', 'Payment failed', 'Please try again.');
     } finally {
       setIsProcessingPayment(false);
     }
@@ -763,20 +802,21 @@ export default function QuickBillingCheckout({
 
   const downloadReceipt = async (pdfUrl: string | undefined) => {
     if (!pdfUrl) {
-      Alert.alert('Error', 'PDF URL not available');
+      showToast('error', 'Error', 'PDF URL not available');
       return;
     }
     try {
       await Linking.openURL(pdfUrl);
     } catch (error) {
       console.error('Open PDF error:', error);
-      Alert.alert('Error', 'Failed to open invoice URL');
+      showToast('error', 'Error', 'Failed to open invoice URL');
     }
   };
 
   const printReceipt = async () => {
     if (!invoicePdfUri) {
-      Alert.alert(
+      showToast(
+        'error',
         'Invoice unavailable',
         'Invoice not available for printing',
       );
@@ -786,7 +826,7 @@ export default function QuickBillingCheckout({
       await Linking.openURL(invoicePdfUri);
     } catch (error) {
       console.error('Print error:', error);
-      Alert.alert('Error', 'Failed to open invoice URL');
+      showToast('error', 'Error', 'Failed to open invoice URL');
     }
   };
 
@@ -795,7 +835,8 @@ export default function QuickBillingCheckout({
     setIsSendingEbill(true);
     try {
       if (!effectiveOrderId) {
-        Alert.alert(
+        showToast(
+          'error',
           'Missing order ID',
           'Order ID is not available for sending e-bill. Please complete the payment first.',
         );
@@ -803,9 +844,14 @@ export default function QuickBillingCheckout({
       }
       const response = await sendLumeEbill(String(effectiveOrderId));
       if (response.success) {
-        Alert.alert('Success', 'E-bill sent successfully!');
+        showToast(
+          'success',
+          'Success',
+          'E-bill sent successfully!',
+        );
       } else {
-        Alert.alert(
+        showToast(
+          'error',
           'Error',
           `Failed to send E-bill: ${
             response.error || 'Unknown error'
@@ -814,7 +860,8 @@ export default function QuickBillingCheckout({
       }
     } catch (error) {
       console.error('Send E-bill error:', error);
-      Alert.alert(
+      showToast(
+        'error',
         'Error',
         'Failed to send E-bill. Please try again.',
       );

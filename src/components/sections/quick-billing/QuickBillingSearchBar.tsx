@@ -8,10 +8,10 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
-  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { searchProducts } from '../../../services/api/productService';
+import Toast from 'react-native-toast-message';
 
 type BillType = "taxInvoice" | "invoice";
 
@@ -50,6 +50,21 @@ interface QuickBillingSearchBarProps {
   onScanPress?: () => void;
   onAddProductPress?: () => void;
 }
+
+const showToast = (
+  type: 'success' | 'error',
+  text1: string,
+  text2?: string,
+) => {
+  Toast.show({
+    type,
+    text1,
+    text2,
+    position: 'top',
+    visibilityTime: 2500,
+    autoHide: true,
+  });
+};
 
 export default function QuickBillingSearchBar({
   cartItems,
@@ -184,7 +199,7 @@ export default function QuickBillingSearchBar({
     // Check if product is out of stock
     const availableQty = Number(product.remainingqty) || 0;
     if (availableQty <= 0) {
-      Alert.alert('Out of stock', 'Product is out of stock');
+      showToast('error', 'Out of stock', 'Product is out of stock');
       return;
     }
 
@@ -197,7 +212,8 @@ export default function QuickBillingSearchBar({
     const newQty = currentCartQty + 1;
 
     if (newQty > availableQty) {
-      Alert.alert(
+      showToast(
+        'error',
         'Stock limit',
         `Only ${availableQty} items available in stock`,
       );

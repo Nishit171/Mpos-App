@@ -8,6 +8,7 @@ import {
   SectionList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
 import QuickBillingHomePage from "./src/components/sections/quick-billing/QuickBillingHomePage";
 import LoginComponent from "./src/components/sections/login/login-component";
 import { CartProvider } from "./src/context/cart-context";
@@ -51,6 +52,7 @@ export default function App() {
       <CartProvider>
         <SafeAreaView style={{ flex: 1 }}>
           <RootNavigator />
+          <Toast position="top" visibilityTime={2500} />
         </SafeAreaView>
       </CartProvider>
     </AuthProvider>

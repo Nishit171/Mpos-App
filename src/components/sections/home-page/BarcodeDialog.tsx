@@ -7,11 +7,11 @@ import {
   StyleSheet,
   TextInput,
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   Platform,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { check, request, PERMISSIONS, RESULTS, PermissionStatus } from 'react-native-permissions';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -49,6 +49,21 @@ interface BarcodeDialogProps {
 }
 
 type ScanState = 'idle' | 'scanning' | 'processing' | 'success' | 'error';
+
+const showToast = (
+  type: 'success' | 'error',
+  text1: string,
+  text2?: string,
+) => {
+  Toast.show({
+    type,
+    text1,
+    text2,
+    position: 'top',
+    visibilityTime: 2500,
+    autoHide: true,
+  });
+};
 
 export default function BarcodeDialog({
   isOpen,
@@ -110,7 +125,8 @@ export default function BarcodeDialog({
         setCameraPermission(result);
 
         if (result !== RESULTS.GRANTED && result !== RESULTS.LIMITED) {
-          Alert.alert(
+          showToast(
+            'error',
             'Camera permission required',
             'Please enable camera access in settings to scan barcodes.',
           );
@@ -327,7 +343,7 @@ export default function BarcodeDialog({
 
       const picked = result.assets?.[0]?.uri;
       if (!picked) {
-        Alert.alert('Upload failed', 'Unable to read selected image.');
+        showToast('error', 'Upload failed', 'Unable to read selected image.');
         return;
       }
 
@@ -343,7 +359,8 @@ export default function BarcodeDialog({
       if (!scannedCode) {
         setScanState('error');
         setError('No barcode found in uploaded image.');
-        Alert.alert(
+        showToast(
+          'error',
           'No barcode found',
           'Could not detect a barcode in the selected image.',
         );
@@ -354,7 +371,11 @@ export default function BarcodeDialog({
       handleScanSuccess(String(scannedCode));
     } catch (error) {
       console.error('Image upload error:', error);
-      Alert.alert('Upload failed', 'Failed to pick image. Please try again.');
+      showToast(
+        'error',
+        'Upload failed',
+        'Failed to pick image. Please try again.',
+      );
       setScanState('error');
       setError('Failed to scan barcode from image.');
     }

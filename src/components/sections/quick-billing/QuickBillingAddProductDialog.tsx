@@ -6,12 +6,12 @@ import {
   Pressable,
   Modal,
   StyleSheet,
-  Alert,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { addProduct } from '../../../services/api/productService';
+import Toast from 'react-native-toast-message';
 
 type BillType = 'taxInvoice' | 'invoice';
 
@@ -21,6 +21,21 @@ interface QuickBillingAddProductDialogProps {
   onSubmit: (product: any) => void;
   billType: BillType;
 }
+
+const showToast = (
+  type: 'success' | 'error',
+  text1: string,
+  text2?: string,
+) => {
+  Toast.show({
+    type,
+    text1,
+    text2,
+    position: 'top',
+    visibilityTime: 2500,
+    autoHide: true,
+  });
+};
 
 export default function QuickBillingAddProductDialog({
   isOpen,
@@ -188,7 +203,7 @@ export default function QuickBillingAddProductDialog({
       const result = await addProduct(productData);
 
       if (!result.success) {
-        Alert.alert('Error', result.error || 'Failed to add product');
+        showToast('error', 'Error', result.error || 'Failed to add product');
         return;
       }
 
@@ -205,10 +220,14 @@ export default function QuickBillingAddProductDialog({
       // Reset form
       resetForm();
       onClose();
-      Alert.alert('Success', 'Product added successfully!');
+      showToast('success', 'Success', 'Product added successfully!');
     } catch (error) {
       console.error('Failed to add product:', error);
-      Alert.alert('Error', 'Failed to add product. Please try again.');
+      showToast(
+        'error',
+        'Error',
+        'Failed to add product. Please try again.',
+      );
     } finally {
       setLoading(false);
     }

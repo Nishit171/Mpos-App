@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   Modal,
@@ -11,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 interface CreditNoteModalProps {
   creditNoteModal: boolean;
@@ -46,10 +46,14 @@ export default function CreditNoteModal({
 
   const openPdf = async () => {
     if (!pdfUrl) {
-      Alert.alert(
-        'Invoice unavailable',
-        'Credit note PDF is not available for this copy.',
-      );
+      Toast.show({
+        type: 'error',
+        text1: 'Invoice unavailable',
+        text2: "Credit note PDF is not available for this copy.",
+        position: 'top',
+        visibilityTime: 2500,
+        autoHide: true,
+      });
       return;
     }
     try {
@@ -57,7 +61,14 @@ export default function CreditNoteModal({
       await Linking.openURL(pdfUrl);
     } catch (error) {
       console.error('Credit note open URL error:', error);
-      Alert.alert('Error', 'Failed to open credit note PDF.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to open credit note PDF.',
+        position: 'top',
+        visibilityTime: 2500,
+        autoHide: true,
+      });
     } finally {
       setIsLoading(false);
     }

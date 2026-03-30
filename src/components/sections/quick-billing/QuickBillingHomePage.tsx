@@ -5,8 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Alert,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -125,6 +125,21 @@ const OrderTabsBar: React.FC<OrderTabsBarProps> = ({
       </ScrollView>
     </View>
   );
+};
+
+const showToast = (
+  type: 'success' | 'error',
+  text1: string,
+  text2?: string,
+) => {
+  Toast.show({
+    type,
+    text1,
+    text2,
+    position: 'top',
+    visibilityTime: 2500,
+    autoHide: true,
+  });
 };
 
 export default function QuickBillingHomePage(
@@ -371,7 +386,11 @@ export default function QuickBillingHomePage(
             // Check if item has remainingqty and validate
             const availableQty = Number(item.remainingqty) || 0;
             if (availableQty > 0 && quantity > availableQty) {
-              Alert.alert('Quantity exceeded', 'Quantity KHATAM ho gyi he');
+              showToast(
+                'error',
+                'Quantity exceeded',
+                'Quantity KHATAM ho gyi he',
+              );
               return o; // Don't update if exceeds available quantity
             }
           }
@@ -441,7 +460,11 @@ export default function QuickBillingHomePage(
               0;
             const newQty = existingItem.quantity + quantity;
             if (availableQty > 0 && newQty > availableQty) {
-              Alert.alert('Quantity exceeded', 'Quantity KHATAM ho gyi he');
+              showToast(
+                'error',
+                'Quantity exceeded',
+                'Quantity KHATAM ho gyi he',
+              );
               return o; // Don't update if exceeds available quantity
             }
             updatedCart = o.cart.map((item: any) =>
@@ -562,7 +585,8 @@ export default function QuickBillingHomePage(
       }
     } catch (error) {
       console.error('Failed to refresh cart:', error);
-      Alert.alert(
+      showToast(
+        'error',
         'Error',
         'Failed to refresh cart. Please try again.',
       );

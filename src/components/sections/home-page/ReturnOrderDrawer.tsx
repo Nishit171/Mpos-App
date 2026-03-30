@@ -8,11 +8,11 @@ import {
   Modal,
   StyleSheet,
   TextInput,
-  Alert,
   Dimensions,
   Pressable,
   ActivityIndicator,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import CreditNoteModal from './CreditNote';
@@ -134,12 +134,14 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
   }, [open]);
 
   const showCustomToast = (code: any) => {
-    Alert.alert(
-      'Quantity Not Available',
-      `For item code ${code}.`,
-      [{ text: 'OK', style: 'default' }],
-      { cancelable: true },
-    );
+    Toast.show({
+      type: 'error',
+      text1: 'Quantity Not Available',
+      text2: `For item code ${code}.`,
+      position: 'top',
+      visibilityTime: 2500,
+      autoHide: true,
+    });
   };
 
   const handleQuantityChange = (sku: string, delta: number) => {
@@ -354,10 +356,14 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
           Number(item.qty),
         );
         if (!isValid) {
-          Alert.alert(
-            'Validation',
-            `Quantity validation failed for item ${item.itemSkuCode}`,
-          );
+          Toast.show({
+            type: 'error',
+            text1: 'Validation',
+            text2: `Quantity validation failed for item ${item.itemSkuCode}`,
+            position: 'top',
+            visibilityTime: 2500,
+            autoHide: true,
+          });
           return false;
         }
       }

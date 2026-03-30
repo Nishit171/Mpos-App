@@ -7,9 +7,9 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Modal,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { searchCustomers } from '../../../services/api/customerService';
 import { getGst, saveGst } from '../../../services/api/orderService';
 
@@ -33,6 +33,21 @@ interface QuickBillingCustomerInfoProps {
   onUpdateInfo: (name: string, phone: string) => void;
   onBillTypeChange: (billType: BillType) => void;
 }
+
+const showToast = (
+  type: 'success' | 'error',
+  text1: string,
+  text2?: string,
+) => {
+  Toast.show({
+    type,
+    text1,
+    text2,
+    position: 'top',
+    visibilityTime: 2500,
+    autoHide: true,
+  });
+};
 
 export default function QuickBillingCustomerInfo({
   name,
@@ -215,20 +230,21 @@ export default function QuickBillingCustomerInfo({
   const handleGstSubmit = async () => {
     const cinNo = gstInput.trim();
     if (!cinNo) {
-      Alert.alert('GST required', 'Please enter GST/CIN number');
+      showToast('error', 'GST required', 'Please enter GST/CIN number');
       return;
     }
     setGstLoading(true);
     try {
       const result = await saveGst(cinNo);
       if (result.success) {
-        Alert.alert('Success', 'GST added successfully');
+        showToast('success', 'Success', 'GST added successfully');
         setShowGstDialog(false);
         setGstInput('');
         onBillTypeChange('taxInvoice');
         setShowBillTypeDropdown(false);
       } else {
-        Alert.alert(
+        showToast(
+          'error',
           'Error',
           result.data?.message ||
             result.error ||
@@ -236,7 +252,8 @@ export default function QuickBillingCustomerInfo({
         );
       }
     } catch {
-      Alert.alert(
+      showToast(
+        'error',
         'Error',
         'Failed to save GST. Please try again.',
       );
