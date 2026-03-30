@@ -25,6 +25,7 @@ interface HeaderProps {
   logout?: () => void;
   onReturnOrderClick?: () => void;
   onUpiClick?: () => void;
+  onUpiUpdated?: () => void;
   onBackClick?: () => void;
 }
 
@@ -34,6 +35,7 @@ export default function Header({
   logout,
   onReturnOrderClick,
   onUpiClick,
+  onUpiUpdated,
   onBackClick,
 }: HeaderProps) {
   const { cart } = useCart();
@@ -161,6 +163,7 @@ export default function Header({
         setUpiId('');
         setSavedUpiId(upiId.trim());
         await AsyncStorage.setItem('userUpiId', upiId.trim());
+        onUpiUpdated?.();
         setTimeout(() => {
           setShowUpiForm(false);
           setShowUpiModal(false);

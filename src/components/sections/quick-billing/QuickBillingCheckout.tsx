@@ -52,6 +52,7 @@ interface QuickBillingCheckoutProps {
   onOrderIdChange?: (id: string | null) => void;
   paymentResponse?: any;
   onPaymentResponseChange?: (response: any) => void;
+  upiRefreshTrigger?: number;
 }
 
 const paymentMethods = [
@@ -114,6 +115,7 @@ export default function QuickBillingCheckout({
   onOrderIdChange,
   paymentResponse: externalPaymentResponse,
   onPaymentResponseChange,
+  upiRefreshTrigger,
 }: QuickBillingCheckoutProps) {
   const [internalSelectedPaymentMethods, setInternalSelectedPaymentMethods] =
     useState<PaymentMethodData[]>([]);
@@ -351,7 +353,7 @@ export default function QuickBillingCheckout({
       }
     };
     fetchUpiIdOnce();
-  }, []);
+  }, [upiRefreshTrigger]);
 
   const handleAddPaymentMethod = async () => {
     if (!tempSelectedMethod || !tempAmount || Number(tempAmount) <= 0) {

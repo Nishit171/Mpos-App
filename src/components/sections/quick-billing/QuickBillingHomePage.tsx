@@ -145,6 +145,7 @@ export default function QuickBillingHomePage(
   >([]);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentResponse, setPaymentResponse] = useState<any>(null);
+  const [upiRefreshTrigger, setUpiRefreshTrigger] = useState(0);
 
   const [billType, setBillType] = useState<BillType>('taxInvoice');
   const [showBarcodeDialog, setShowBarcodeDialog] = useState(false);
@@ -718,6 +719,7 @@ export default function QuickBillingHomePage(
       <Header
         user={user ? { userName: (user as any).userName, email: (user as any).email } : undefined}
         logout={logout}
+        onUpiUpdated={() => setUpiRefreshTrigger(prev => prev + 1)}
         onReturnOrderClick={() => {
           console.log('OPEN RETURN DRAWER');
           setReturnDrawerOpen(true);
@@ -801,6 +803,7 @@ export default function QuickBillingHomePage(
               onOrderIdChange={setOrderId}
               paymentResponse={paymentResponse}
               onPaymentResponseChange={setPaymentResponse}
+              upiRefreshTrigger={upiRefreshTrigger}
             />
           </View>
         </ScrollView>
