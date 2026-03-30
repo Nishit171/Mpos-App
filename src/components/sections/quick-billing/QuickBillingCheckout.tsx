@@ -496,6 +496,7 @@ export default function QuickBillingCheckout({
 
   const handleApplyDiscount = async () => {
     if (isApplyingDiscount) return;
+    if (selectedPaymentMethods.length > 0) return;
 
     setIsApplyingDiscount(true);
     try {
@@ -558,6 +559,7 @@ export default function QuickBillingCheckout({
 
   const handleRemoveDiscount = async () => {
     if (isApplyingDiscount) return;
+    if (selectedPaymentMethods.length > 0) return;
 
     setIsApplyingDiscount(true);
     try {
@@ -823,6 +825,8 @@ export default function QuickBillingCheckout({
 
   const shouldShowEbill = !(isSendingEbill || !effectiveOrderId);
 
+  const discountLocked = selectedPaymentMethods.length > 0;
+
   const parsedTempAmount = Number(tempAmount);
   const shouldIncludeUpiAmount =
     Number.isFinite(parsedTempAmount) && parsedTempAmount > 0;
@@ -858,8 +862,14 @@ export default function QuickBillingCheckout({
         {cartItems.length > 0 && (
           <View style={styles.discountSection}>
             <Pressable
-              style={styles.discountToggle}
-              onPress={() => setShowDiscount(prev => !prev)}
+              style={[
+                styles.discountToggle,
+                discountLocked && styles.discountToggleDisabled,
+              ]}
+              onPress={() => {
+                if (discountLocked && !showDiscount) return;
+                setShowDiscount(prev => !prev);
+              }}
             >
               <Text style={styles.discountIcon}>%</Text>
               <Text style={styles.discountToggleText}>Add Discount</Text>
@@ -869,15 +879,24 @@ export default function QuickBillingCheckout({
             </Pressable>
 
             {showDiscount && (
-              <View style={styles.discountContent}>
+              <View
+                style={[
+                  styles.discountContent,
+                  discountLocked && styles.discountContentLocked,
+                ]}
+                pointerEvents={discountLocked ? 'none' : 'auto'}
+              >
                 <View style={styles.discountInputsRow}>
                   <Pressable
                     style={[
                       styles.discountTypeButton,
                       discountType === 'percent' &&
                         styles.discountTypeButtonActive,
+                      discountLocked && styles.discountControlDisabled,
                     ]}
+                    disabled={discountLocked}
                     onPress={() => {
+                      if (discountLocked) return;
                       setDiscountType('percent');
                       setDiscountAmount(0);
                     }}
@@ -897,8 +916,11 @@ export default function QuickBillingCheckout({
                       styles.discountTypeButton,
                       discountType === 'amount' &&
                         styles.discountTypeButtonActive,
+                      discountLocked && styles.discountControlDisabled,
                     ]}
+                    disabled={discountLocked}
                     onPress={() => {
+                      if (discountLocked) return;
                       setDiscountType('amount');
                       setDiscountPercent(0);
                     }}
@@ -934,19 +956,22 @@ export default function QuickBillingCheckout({
                       placeholder="Enter percentage"
                       style={styles.discountInput}
                       placeholderTextColor="#9ca3af"
+                      editable={!discountLocked}
                     />
                     <Pressable
                       style={[
                         styles.discountApplyButton,
                         (!discountPercent ||
                           discountPercent <= 0 ||
-                          isApplyingDiscount) &&
+                          isApplyingDiscount ||
+                          discountLocked) &&
                           styles.discountApplyButtonDisabled,
                       ]}
                       disabled={
                         !discountPercent ||
                         discountPercent <= 0 ||
-                        isApplyingDiscount
+                        isApplyingDiscount ||
+                        discountLocked
                       }
                       onPress={handleApplyDiscount}
                     >
@@ -972,19 +997,22 @@ export default function QuickBillingCheckout({
                       placeholder="Enter amount"
                       style={styles.discountInput}
                       placeholderTextColor="#9ca3af"
+                      editable={!discountLocked}
                     />
                     <Pressable
                       style={[
                         styles.discountApplyButton,
                         (!discountAmount ||
                           discountAmount <= 0 ||
-                          isApplyingDiscount) &&
+                          isApplyingDiscount ||
+                          discountLocked) &&
                           styles.discountApplyButtonDisabled,
                       ]}
                       disabled={
                         !discountAmount ||
                         discountAmount <= 0 ||
-                        isApplyingDiscount
+                        isApplyingDiscount ||
+                        discountLocked
                       }
                       onPress={handleApplyDiscount}
                     >
@@ -1005,7 +1033,7 @@ export default function QuickBillingCheckout({
                     </Text>
                     <Pressable
                       onPress={handleRemoveDiscount}
-                      disabled={isApplyingDiscount}
+                      disabled={isApplyingDiscount || discountLocked}
                       style={styles.removeDiscountButton}
                     >
                       <Text style={styles.removeDiscountText}>✕</Text>
@@ -1534,6 +1562,15 @@ const styles = StyleSheet.create({
   },
   discountContent: {
     marginTop: 6,
+  },
+  discountToggleDisabled: {
+    opacity: 0.55,
+  },
+  discountContentLocked: {
+    opacity: 0.65,
+  },
+  discountControlDisabled: {
+    opacity: 0.5,
   },
   discountInputsRow: {
     flexDirection: 'row',
