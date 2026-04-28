@@ -23,6 +23,10 @@ import { useCart } from '../../../context/cart-context';
 import { useAuth } from '../../../context/auth-context';
 import { refreshCart } from '../../../services/api/orderService';
 import {
+  searchProducts,
+  addProduct,
+} from '../../../services/api/productService';
+import {
   getAllHoldBills,
   getHoldOrderDetails,
   removeHoldOrder,
@@ -30,6 +34,26 @@ import {
 } from '../../../services/api/holdOrderService';
 
 type BillType = 'taxInvoice' | 'invoice';
+
+const getNextNumberedProductName = (name: string): string => {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  const m = raw.match(/^(.*?)(?:\s+(\d+))?$/);
+  if (!m) return `${raw} 2`;
+  const base = (m[1] || raw).trim();
+  const n = m[2] ? Number(m[2]) : 1;
+  return `${base} ${Number.isFinite(n) ? n + 1 : 2}`.trim();
+};
+
+const randomSkuNumber = () => Math.floor(100000 + Math.random() * 900000);
+const randomHsnCode = () => Math.floor(10000000 + Math.random() * 90000000);
+
+const pickCartItemForVariant = (items: any[], nextLabel: string) => {
+  const target = nextLabel.trim().toLowerCase();
+  return items.find(
+    item => String(item?.name || '').trim().toLowerCase() === target,
+  );
+};
 
 type Product = {
   id: string;
@@ -153,6 +177,11 @@ export default function QuickBillingHomePage(
   const [refreshedCart, setRefreshedCart] = useState<any>(null);
   const [loadingTabAction, setLoadingTabAction] = useState(false);
   const [isRefreshingCart, setIsRefreshingCart] = useState(false);
+  const [variantPlusLoadingId, setVariantPlusLoadingId] = useState<string | number | null>(null);
+
+  const syncCartToContext = (next: any[]) => {
+    Promise.resolve().then(() => setCart(next));
+  };
 
   // Shared payment state
   const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<
@@ -316,16 +345,16 @@ export default function QuickBillingHomePage(
               o.id === id ? { ...o, cart: details.cartItem } : o,
             ),
           );
-          setCart(details.cartItem);
+          syncCartToContext(details.cartItem);
         } else {
-          setCart([]);
+          syncCartToContext([]);
         }
       } catch (err) {
         console.error('Failed to fetch order details:', err);
-        setCart([]);
+        syncCartToContext([]);
       }
     } else {
-      setCart([]);
+      syncCartToContext([]);
     }
 
     setLoadingTabAction(false);
@@ -368,7 +397,7 @@ export default function QuickBillingHomePage(
       };
       setOrders([...orders, newOrder]);
       setActiveOrderId(newOrder.id);
-      setCart([]);
+      syncCartToContext([]);
     } catch (error) {
       console.error('Error adding new order:', error);
     } finally {
@@ -401,7 +430,7 @@ export default function QuickBillingHomePage(
           );
           const updatedOrder = { ...o, cart: updatedCart };
           if (o.id === activeOrderId) {
-            setCart(updatedCart);
+            syncCartToContext(updatedCart);
           }
           return updatedOrder;
         }
@@ -422,10 +451,135 @@ export default function QuickBillingHomePage(
             ? { ...item, netPrice: newPrice, priceEdited: true }
             : item,
         );
-        setCart(updatedCart);
+        syncCartToContext(updatedCart);
         return { ...o, cart: updatedCart };
       }),
     );
+  };
+
+  const handleAddNextVariant = async (sourceItem: any) => {
+    const nextLabel = getNextNumberedProductName(sourceItem?.name || '');
+    if (!nextLabel.trim()) {
+      showToast('error', 'Invalid product', 'Invalid product name');
+      return;
+    }
+
+    setVariantPlusLoadingId(sourceItem.id);
+    let lastSkunmbr: number | null = null;
+    let lastHsn: number | null = null;
+
+    try {
+      let result = await searchProducts(nextLabel);
+      let items =
+        result.success &&
+        result.data?.status === 'success' &&
+        Array.isArray(result.data.cartItem)
+          ? result.data.cartItem
+          : [];
+      let picked = pickCartItemForVariant(items, nextLabel);
+
+      if (!picked && nextLabel.toLowerCase() !== nextLabel) {
+        result = await searchProducts(nextLabel.toLowerCase());
+        items =
+          result.success &&
+          result.data?.status === 'success' &&
+          Array.isArray(result.data.cartItem)
+            ? result.data.cartItem
+            : [];
+        picked = pickCartItemForVariant(items, nextLabel);
+      }
+
+      if (!picked) {
+        lastSkunmbr = randomSkuNumber();
+        lastHsn = randomHsnCode();
+        const addRes = await addProduct({
+          pludesc: nextLabel,
+          skunmbr: lastSkunmbr,
+          mrp: 1200,
+          price: 1200,
+          qtyunit: 3,
+          qty: 200,
+          hsn_code: lastHsn,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+        });
+        if (!addRes.success) {
+          showToast('error', 'Error', (addRes as { error?: string }).error || 'Could not add product');
+          return;
+        }
+        result = await searchProducts(nextLabel);
+        items =
+          result.success &&
+          result.data?.status === 'success' &&
+          Array.isArray(result.data.cartItem)
+            ? result.data.cartItem
+            : [];
+        picked = pickCartItemForVariant(items, nextLabel);
+      }
+
+      if (picked) {
+        const availableQty = Number(picked.remainingqty) || 0;
+        if (availableQty <= 0) {
+          showToast('error', 'Out of stock', 'Product is out of stock');
+          return;
+        }
+        const cartItem = {
+          deptNmbr: picked.deptNmbr || '0',
+          skucounter: picked.skucounter || 0,
+          qtyunit: picked.qtyunit || 'Pc',
+          netPrice: picked.netPrice ?? picked.MRP ?? 1200,
+          MRP: picked.MRP ?? picked.netPrice ?? 1200,
+          vatbit: picked.vatbit || '00000000000000000000000000000000',
+          productgrpnmbr: picked.productgrpnmbr || 0,
+          pluFlag: picked.pluFlag || 'E',
+          itemHSN: picked.itemHSN,
+          qtyMux: picked.qtyMux || '',
+          gstctype: billType === 'invoice' ? 1 : picked.gstctype || 1,
+          baseAmnt: picked.baseAmnt ?? picked.netPrice ?? picked.MRP ?? 0,
+          name: picked.name || nextLabel,
+          id: picked.id,
+          scflag: picked.scflag || 0,
+          sku: picked.sku || picked.id,
+          status: picked.status || 'success',
+          quantity: 1,
+          scantype: 'MANUAL',
+          remainingqty: picked.remainingqty || '0',
+        };
+        addToActiveOrderCart(cartItem, 1);
+        showToast('success', 'Added', `${picked.name || nextLabel} added to cart`);
+      } else {
+        const skunmbr = lastSkunmbr ?? randomSkuNumber();
+        const hsn = lastHsn ?? randomHsnCode();
+        const synthetic = {
+          deptNmbr: '0',
+          skucounter: 0,
+          qtyunit: 'Pc',
+          netPrice: 1200,
+          MRP: 1200,
+          vatbit: '00000000000000000000000000000000',
+          productgrpnmbr: 0,
+          pluFlag: 'E',
+          itemHSN: hsn,
+          qtyMux: '',
+          gstctype: 1,
+          baseAmnt: 1200,
+          name: nextLabel,
+          id: String(Date.now()),
+          sku: String(skunmbr),
+          status: 'success',
+          remainingqty: '200',
+          scflag: 0,
+        };
+        addToActiveOrderCart(synthetic, 1);
+        showToast('success', 'Added', `${nextLabel} added to cart`);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'Error', 'Failed to add next variant');
+    } finally {
+      setVariantPlusLoadingId(null);
+    }
   };
 
   const removeFromActiveOrderCart = (id: string | number) => {
@@ -435,7 +589,7 @@ export default function QuickBillingHomePage(
           const updatedCart = o.cart.filter((item: any) => item.id !== id);
           const updatedOrder = { ...o, cart: updatedCart };
           if (o.id === activeOrderId) {
-            setCart(updatedCart);
+            syncCartToContext(updatedCart);
           }
           return updatedOrder;
         }
@@ -553,7 +707,7 @@ export default function QuickBillingHomePage(
           }
           const updatedOrder = { ...o, cart: updatedCart };
           if (o.id === activeOrderId) {
-            setCart(updatedCart);
+            syncCartToContext(updatedCart);
           }
           return updatedOrder;
         }
@@ -581,7 +735,7 @@ export default function QuickBillingHomePage(
       const result = await refreshCart(input);
       if (result.success && result.data && result.data.cartItem) {
         setRefreshedCart(result.data);
-        setCart(result.data.cartItem);
+        syncCartToContext(result.data.cartItem);
       }
     } catch (error) {
       console.error('Failed to refresh cart:', error);
@@ -612,7 +766,7 @@ export default function QuickBillingHomePage(
           const result = await refreshCart(input);
           if (result.success && result.data && result.data.cartItem) {
             setRefreshedCart(result.data);
-            setCart(result.data.cartItem);
+            syncCartToContext(result.data.cartItem);
           }
         } catch (error) {
           console.error('Failed to refresh cart:', error);
@@ -626,7 +780,7 @@ export default function QuickBillingHomePage(
       setRefreshedCart(null);
       // Also clear cart context to ensure it's empty
       if (!current || !current.cart || current.cart.length === 0) {
-        setCart([]);
+        syncCartToContext([]);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -663,7 +817,7 @@ export default function QuickBillingHomePage(
         ),
       );
     }
-    setCart([]);
+    syncCartToContext([]);
     // Clear refreshedCart to reset all amounts
     setRefreshedCart(null);
     // Clear payment methods when cart is cleared
@@ -704,9 +858,9 @@ export default function QuickBillingHomePage(
         o => o.id === newActiveOrderId,
       );
       if (newActiveOrder && Array.isArray(newActiveOrder.cart)) {
-        setCart(newActiveOrder.cart);
+        syncCartToContext(newActiveOrder.cart);
       } else {
-        setCart([]);
+        syncCartToContext([]);
       }
     }
   };
@@ -802,6 +956,8 @@ export default function QuickBillingHomePage(
               onUpdatePrice={updateActiveOrderItemPrice}
               onRemoveFromCart={removeFromActiveOrderCart}
               onClearCart={clearCurrentOrderCart}
+              onAddNextVariant={handleAddNextVariant}
+              variantPlusLoadingId={variantPlusLoadingId}
             />
           </View>
 

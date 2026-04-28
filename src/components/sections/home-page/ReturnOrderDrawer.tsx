@@ -24,6 +24,7 @@ import {
   getReturnReasons,
   getSaveReturns,
   getvalidateQuantity,
+  isValidateQuantitySuccess,
 } from '../../../services/api/ReturnOrderApi';
 
 interface Order {
@@ -248,7 +249,7 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
           billId,
           size,
         );
-        if (validateQuantity.validate === 'success') {
+        if (validateQuantity && isValidateQuantitySuccess(validateQuantity)) {
           const itemDetails = await getItemDetails(currentItemCode, billId);
           if (itemDetails) {
             const newItemArray = Array.isArray(itemDetails)
@@ -350,12 +351,12 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
           : {}),
       };
       for (const item of updatedItemsArray) {
-        const isValid = await getvalidateQuantity(
+        const vq = await getvalidateQuantity(
           item.itemSkuCode,
           billId,
           Number(item.qty),
         );
-        if (!isValid) {
+        if (!vq || !isValidateQuantitySuccess(vq)) {
           Toast.show({
             type: 'error',
             text1: 'Validation',

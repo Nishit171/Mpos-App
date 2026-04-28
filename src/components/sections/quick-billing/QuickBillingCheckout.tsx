@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import {
   View,
   Text,
@@ -23,9 +23,14 @@ import {
   getUpiId,
   placeOrder,
   sendLumeEbill,
+  sendEbill,
+  sendEbillAndCreditNote,
   orderPayment,
   refreshCart,
 } from '../../../services/api/orderService';
+import QuickBillingExchangeDialog, {
+  type QuickBillingExchangeApplyPayload,
+} from './QuickBillingExchangeDialog';
 
 export interface PaymentMethodData {
   method: string
@@ -37,6 +42,50 @@ export interface PaymentMethodData {
 
 type BillType = 'taxInvoice' | 'invoice';
 
+function getCreditNotePdfUrlFromPaymentResponse(data: any): string | null {
+  if (!data) return null;
+  if (typeof data.creditNotPdfUrl === 'string' && data.creditNotPdfUrl.trim()) {
+    return data.creditNotPdfUrl.trim();
+  }
+  const notes = data.creditNotes;
+  if (!Array.isArray(notes)) return null;
+  for (const n of notes) {
+    const customer = n?.txtCreditNote?.creditNotPdfUrl;
+    if (typeof customer === 'string' && customer.trim()) return customer.trim();
+    const office = n?.txtCreditNoteOfc?.creditNotPdfUrl;
+    if (typeof office === 'string' && office.trim()) return office.trim();
+  }
+  return null;
+}
+
+function getNetTotalFromRefreshPayload(data: any): number {
+  if (!data) return 0;
+  const n = data.netTotal;
+  if (typeof n === 'number' && !Number.isNaN(n)) return Math.max(0, n);
+  if (typeof n === 'string' && n !== '') {
+    const p = parseFloat(n);
+    if (!Number.isNaN(p)) return Math.max(0, p);
+  }
+  const items = data.cartItem ?? [];
+  const gross = items.reduce(
+    (s: number, item: any) =>
+      s + (Number(item.netPrice) || 0) * (Number(item.quantity) || 0),
+    0,
+  );
+  const discounts = data.discounts;
+  let disc = 0;
+  if (Array.isArray(discounts)) {
+    disc = discounts.reduce(
+      (s: number, d: any) =>
+        s + (typeof d === 'object' && d?.discAmount ? d.discAmount : 0),
+      0,
+    );
+  } else if (discounts && typeof discounts === 'object' && discounts.discAmount) {
+    disc = discounts.discAmount;
+  }
+  return Math.max(0, gross - disc);
+}
+
 interface QuickBillingCheckoutProps {
   cartItems: any[];
   refreshedCart?: any;
@@ -47,7 +96,7 @@ interface QuickBillingCheckoutProps {
   onPaymentComplete?: () => void;
   onCartRefreshed?: (refreshedCart: any) => void;
   selectedPaymentMethods?: PaymentMethodData[];
-  onPaymentMethodsChange?: (methods: PaymentMethodData[]) => void;
+  onPaymentMethodsChange?: Dispatch<SetStateAction<PaymentMethodData[]>>;
   orderId?: string | null;
   onOrderIdChange?: (id: string | null) => void;
   paymentResponse?: any;
@@ -170,6 +219,9 @@ export default function QuickBillingCheckout({
   const [orgName, setOrgName] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
   const [isSendingEbill, setIsSendingEbill] = useState(false);
+  const [isSendingEcreditNote, setIsSendingEcreditNote] = useState(false);
+  const [isSendingWhatsAppDocs, setIsSendingWhatsAppDocs] = useState(false);
+  const [paymentSuccessView, setPaymentSuccessView] = useState<'invoice' | 'creditNote'>('invoice');
   const [isCartManuallyCleared, setIsCartManuallyCleared] =
     useState(false);
 
@@ -186,6 +238,9 @@ export default function QuickBillingCheckout({
   >(null);
   const [isApplyingDiscount, setIsApplyingDiscount] =
     useState(false);
+  const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false);
+  const [exchangeData, setExchangeData] = useState<QuickBillingExchangeApplyPayload | null>(null);
+  const [exchangeRefundMode, setExchangeRefundMode] = useState<'CASH' | 'CREDIT_NOTE' | null>(null);
 
   const { clearCart } = useCart();
 
@@ -229,6 +284,10 @@ export default function QuickBillingCheckout({
   const netTotal = isCartEmpty
     ? 0
     : Math.max(0, grossTotal - computedDiscountAmount);
+  const exchangeCreditAmount = exchangeData?.totalAmount ?? 0;
+  const amountDueAfterExchange = isCartEmpty ? 0 : Math.max(0, netTotal - exchangeCreditAmount);
+  const surplusExchange = isCartEmpty ? 0 : Math.max(0, exchangeCreditAmount - netTotal);
+  const isRefundOnlySurplus = !isCartEmpty && surplusExchange >= 0.01;
 
   const totalAmountPaid = isCartEmpty
     ? 0
@@ -236,10 +295,12 @@ export default function QuickBillingCheckout({
         (sum, method) => sum + method.amount,
         0,
       );
-  const remainingAmount = netTotal - totalAmountPaid;
-  const isPaymentComplete = isCartEmpty
-    ? false
-    : Math.abs(remainingAmount) < 0.01;
+  const remainingAmount = amountDueAfterExchange - totalAmountPaid;
+  const incomingPaymentComplete =
+    isCartEmpty || Math.abs(totalAmountPaid - amountDueAfterExchange) < 0.01;
+  const refundSettlementComplete =
+    surplusExchange < 0.01 || exchangeRefundMode === 'CASH' || exchangeRefundMode === 'CREDIT_NOTE';
+  const isPaymentComplete = !isCartEmpty && incomingPaymentComplete && refundSettlementComplete;
   const effectiveOrderId =
     orderId ||
     paymentResponse?.data?.orderId ||
@@ -278,6 +339,7 @@ export default function QuickBillingCheckout({
     if (paymentResponse && paymentResponse.success) {
       setIsModalOpen(true);
       setInvoicePreviewMode('google');
+      setPaymentSuccessView('invoice');
     }
   }, [paymentResponse]);
 
@@ -371,6 +433,10 @@ export default function QuickBillingCheckout({
   }, [upiRefreshTrigger]);
 
   const handleAddPaymentMethod = async () => {
+    if (isRefundOnlySurplus) {
+      showToast('error', 'Not required', 'Nothing to pay in. Choose cash or credit note refund below.');
+      return;
+    }
     if (!tempSelectedMethod || !tempAmount || Number(tempAmount) <= 0) {
       showToast(
         'error',
@@ -458,6 +524,10 @@ export default function QuickBillingCheckout({
   };
 
   const handleUpdatePaymentMethod = () => {
+    if (isRefundOnlySurplus) {
+      showToast('error', 'Not required', 'Nothing to pay in. Choose refund mode below.');
+      return;
+    }
     if (
       editingPaymentIndex === null ||
       !tempSelectedMethod ||
@@ -483,11 +553,11 @@ export default function QuickBillingCheckout({
     const otherPaymentMethodsTotal = selectedPaymentMethods
       .filter((_, index) => index !== editingPaymentIndex)
       .reduce((sum, method) => sum + method.amount, 0);
-    if (otherPaymentMethodsTotal + amount > netTotal) {
+    if (otherPaymentMethodsTotal + amount > amountDueAfterExchange) {
       showToast(
         'error',
         'Amount too high',
-        `Total payment amount cannot exceed ₹${netTotal.toFixed(
+        `Total payment amount cannot exceed ₹${amountDueAfterExchange.toFixed(
           2,
         )}`,
       );
@@ -629,8 +699,16 @@ export default function QuickBillingCheckout({
       setAppliedDiscount(null);
       setDiscountPercent(0);
       setDiscountAmount(0);
+      setExchangeData(null);
+      setExchangeRefundMode(null);
     }
   }, [cartItems.length]);
+
+  useEffect(() => {
+    if (surplusExchange < 0.01) {
+      setExchangeRefundMode(null);
+    }
+  }, [surplusExchange]);
 
   useEffect(() => {
     if (
@@ -642,131 +720,153 @@ export default function QuickBillingCheckout({
     }
   }, [cartItems, isCartManuallyCleared, refreshedCart]);
 
+  useEffect(() => {
+    if (isCartEmpty || surplusExchange < 0.01) return;
+    setSelectedPaymentMethods(prev => (prev.length ? [] : prev));
+    setTempSelectedMethod('');
+    setTempAmount('');
+    setTempCreditNoteNumber('');
+    setIsEditingMode(false);
+    setEditingPaymentIndex(null);
+  }, [surplusExchange, isCartEmpty, setSelectedPaymentMethods]);
+
+  useEffect(() => {
+    if (isCartEmpty || surplusExchange >= 0.01) return;
+    setSelectedPaymentMethods(prev => {
+      const paid = prev.reduce((s, m) => s + m.amount, 0);
+      if (paid > amountDueAfterExchange + 0.02) return [];
+      return prev;
+    });
+  }, [amountDueAfterExchange, surplusExchange, isCartEmpty, setSelectedPaymentMethods]);
+
   const handlePayNow = async () => {
+    if (isCartEmpty) {
+      showToast('error', 'Cart empty', 'No items in cart');
+      return;
+    }
     if (!isPaymentComplete) {
-      showToast(
-        'error',
-        'Payment incomplete',
-        'Please ensure the total payment amount matches the required amount',
-      );
+      showToast('error', 'Payment incomplete', 'Please ensure payment and refund settings are complete.');
       return;
     }
-    if (isProcessingPayment) {
-      return;
-    }
+    if (isProcessingPayment) return;
     setIsProcessingPayment(true);
     try {
+      const buildRefreshCartInputForPay = () => {
+        if (!appliedDiscount) {
+          return { cartItem: cartItems.map(item => ({ ...item, qtyMux: item.qtyMux || '' })) };
+        }
+        if (appliedDiscount.type === 'percent') {
+          return {
+            cartItem: cartItems.map(item => ({
+              ...item,
+              qtyMux: item.qtyMux || '',
+              overrideDiscountType: '%',
+              overrideDiscountValue: String(appliedDiscount.value),
+            })),
+          };
+        }
+        return {
+          cartItem: cartItems.map(item => ({ ...item, qtyMux: item.qtyMux || '' })),
+          discount: {
+            cartDiscountType: '$',
+            cartDiscountValue: appliedDiscount.value.toString(),
+          },
+        };
+      };
+
+      const refreshResult = await refreshCart(buildRefreshCartInputForPay());
+      if (!refreshResult.success || !refreshResult.data?.cartItem) {
+        showToast('error', 'Error', 'Cart refresh failed. Please try again.');
+        return;
+      }
+      const fresh = refreshResult.data;
+      onCartRefreshed?.(fresh);
+
+      const netPay = getNetTotalFromRefreshPayload(fresh);
+      const exchCredit = exchangeData?.totalAmount ?? 0;
+      const amountDuePay = Math.max(0, netPay - exchCredit);
+      const surplusPay = Math.max(0, exchCredit - netPay);
+      const paid = selectedPaymentMethods.reduce((s, m) => s + m.amount, 0);
+      if (amountDuePay >= 0.01 && Math.abs(paid - amountDuePay) > 0.02) {
+        showToast('error', 'Amount mismatch', `Amount due is ₹${amountDuePay.toFixed(2)} after refresh.`);
+        return;
+      }
+      if (amountDuePay < 0.01 && paid > 0.02) {
+        showToast('error', 'Remove entries', 'Nothing to collect. Remove payment entries.');
+        return;
+      }
+      if (surplusPay >= 0.01 && !exchangeRefundMode) {
+        showToast('error', 'Refund mode required', 'Choose cash or credit note for excess exchange.');
+        return;
+      }
+
       let placedOrderId = orderId;
-      const placeOrderPayload = refreshedCart
-        ? refreshedCart
-        : { cartItem: cartItems };
       if (!placedOrderId) {
-        try {
-          const placeOrderRes = await placeOrder(
-            placeOrderPayload,
-          );
-          if (
-            placeOrderRes.success &&
-            placeOrderRes.data &&
-            placeOrderRes.data.order_id
-          ) {
-            placedOrderId = placeOrderRes.data.order_id;
-            setOrderId(placedOrderId);
-          } else {
-            showToast(
-              'error',
-              'Error',
-              'Failed to place order. Please try again.',
-            );
-            return;
-          }
-        } catch (error) {
-          console.error('Place order error:', error);
-          showToast(
-            'error',
-            'Error',
-            'Failed to place order. Please try again.',
-          );
+        const placeOrderRes = await placeOrder(fresh);
+        if (placeOrderRes.success && placeOrderRes.data && placeOrderRes.data.order_id) {
+          placedOrderId = placeOrderRes.data.order_id;
+          setOrderId(placedOrderId);
+        } else {
+          showToast('error', 'Error', 'Failed to place order. Please try again.');
           return;
         }
       }
-      const consumerResponse = selectedPaymentMethods.map(
-        method => {
-          const baseResponse = { amountPaid: method.amount };
-          switch (method.method) {
-            case 'cash':
-              return {
-                ...baseResponse,
-                paymentChannel: 'CASH',
-                orgPaymentMediaId: '1',
-                paymentMode: 'CASH',
-              };
-            case 'card':
-              return {
-                ...baseResponse,
-                paymentChannel: 'CARD',
-                orgPaymentMediaId: '4',
-                paymentMode: 'CARD',
-                cardNumber: '',
-              };
-            case 'creditNote':
-              return {
-                ...baseResponse,
-                paymentChannel: 'CREDIT_NOTE',
-                orgPaymentMediaId: '5',
-                paymentMode: 'CREDIT_NOTE',
-                creditNoteNo: method.creditNoteNumber,
-              };
-            case 'upi':
-              return {
-                ...baseResponse,
-                paymentChannel: 'UPI',
-                orgPaymentMediaId: '6',
-                paymentMode: 'UPI',
-                upiId: systemUpiId,
-              };
-            default:
-              return baseResponse;
-          }
-        },
-      );
-      const input = {
+
+      const consumerResponse = selectedPaymentMethods.map(method => {
+        const baseResponse = { amountPaid: method.amount };
+        switch (method.method) {
+          case 'cash':
+            return { ...baseResponse, paymentChannel: 'CASH', orgPaymentMediaId: '1', paymentMode: 'CASH' };
+          case 'card':
+            return { ...baseResponse, paymentChannel: 'CARD', orgPaymentMediaId: '4', paymentMode: 'CARD', cardNumber: '' };
+          case 'creditNote':
+            return { ...baseResponse, paymentChannel: 'CREDIT_NOTE', orgPaymentMediaId: '5', paymentMode: 'CREDIT_NOTE', creditNoteNo: method.creditNoteNumber };
+          case 'upi':
+            return { ...baseResponse, paymentChannel: 'UPI', orgPaymentMediaId: '6', paymentMode: 'UPI', upiId: systemUpiId };
+          default:
+            return baseResponse;
+        }
+      });
+
+      const hasExchange = Boolean(exchangeData?.lines?.length);
+      const needsInflow = amountDuePay >= 0.01;
+      const storeOwesRefund = surplusPay >= 0.01;
+      const consumerResponseForApi =
+        hasExchange && storeOwesRefund && !needsInflow ? [] : consumerResponse;
+      const exchangePayload =
+        hasExchange && exchangeData
+          ? {
+              originalOrderId: String(exchangeData.billId),
+              reasonId: exchangeData.reasonId,
+              returnLines: exchangeData.lines.map(l => ({ itemSkuCode: l.itemSkuCode, qty: l.qty })),
+              mergeExchangeOnInvoice: true,
+              ...(storeOwesRefund && exchangeRefundMode
+                ? {
+                    refund: {
+                      mode: exchangeRefundMode,
+                      amount: Math.round(surplusPay * 100) / 100,
+                    },
+                  }
+                : {}),
+            }
+          : undefined;
+
+      const input: Record<string, unknown> = {
         userType: 'CONSUMER',
-        consumerResponse,
+        consumerResponse: consumerResponseForApi,
         order_id: placedOrderId ? String(placedOrderId) : '',
-        billAmount: netTotal,
+        billAmount: amountDuePay,
         customerName: customerName?.trim() || '',
         customerNumber: customerPhone?.trim() || '',
         isTaxInvoice: billType === 'taxInvoice',
       };
+      if (exchangePayload) input.exchange = exchangePayload;
+
       const response = await orderPayment(input);
       setPaymentResponse(response);
       if (response.success) {
-        const customerSaveResult = await saveCustomerInfo(
-          customerName,
-          customerPhone,
-        );
-        if (customerSaveResult.success) {
-          if (customerName?.trim() || customerPhone?.trim()) {
-            showToast(
-              'success',
-              'Payment successful',
-              'Payment successful! Customer info saved.',
-            );
-          } else {
-            showToast(
-              'success',
-              'Payment successful',
-              'Payment successful!',
-            );
-          }
-        } else {
-          showToast(
-            'success',
-            'Payment successful',
-            'Payment successful!',
-          );
-        }
+        await saveCustomerInfo(customerName, customerPhone);
+        showToast('success', 'Payment successful', 'Payment successful!');
       } else {
         showToast('error', 'Payment failed', 'Please try again.');
       }
@@ -798,6 +898,9 @@ export default function QuickBillingCheckout({
     setAppliedDiscount(null);
     setDiscountPercent(0);
     setDiscountAmount(0);
+    setExchangeData(null);
+    setExchangeRefundMode(null);
+    setPaymentSuccessView('invoice');
   };
 
   const downloadReceipt = async (pdfUrl: string | undefined) => {
@@ -870,7 +973,95 @@ export default function QuickBillingCheckout({
     }
   };
 
+  const normalizeWhatsappTo = (raw: string) => {
+    const digits = (raw || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('91')) return digits;
+    const trimmed = digits.replace(/^0+/, '');
+    return trimmed.startsWith('91') ? trimmed : `91${trimmed}`;
+  };
+
+  const handleSendEbillAndCreditNote = async () => {
+    if (isSendingWhatsAppDocs) return;
+    setIsSendingWhatsAppDocs(true);
+    try {
+      const billUrl = paymentResponse?.data?.invoicePdfUrl;
+      const creditNoteUrl = getCreditNotePdfUrlFromPaymentResponse(paymentResponse?.data);
+      if (!customerPhone || !billUrl || !creditNoteUrl) {
+        showToast('error', 'Missing data', 'Phone, bill, or credit note link not available.');
+        return;
+      }
+      const storeNameOrOrg = storeName || orgName;
+      if (!storeNameOrOrg) {
+        showToast('error', 'Store unavailable', 'Store name is unavailable. Please login again.');
+        return;
+      }
+      const to = normalizeWhatsappTo(customerPhone);
+      if (!to) {
+        showToast('error', 'Invalid number', 'Customer WhatsApp number is invalid.');
+        return;
+      }
+      const payload = {
+        to,
+        templateName: 'ebill_creditnote',
+        languageCode: 'en',
+        customerName: customerName?.trim() || 'Customer',
+        storeName: storeNameOrOrg,
+        billUrl,
+        creditNoteUrl,
+      };
+      const response = await sendEbillAndCreditNote(payload);
+      if (response.success) {
+        showToast('success', 'Success', 'WhatsApp sent successfully.');
+      } else {
+        showToast('error', 'Failed', response.error || 'Failed to send WhatsApp.');
+      }
+    } catch (error) {
+      console.error('Send WhatsApp docs error:', error);
+      showToast('error', 'Failed', 'Failed to send WhatsApp. Please try again.');
+    } finally {
+      setIsSendingWhatsAppDocs(false);
+    }
+  };
+
+  const handleSendEcreditNote = async () => {
+    if (isSendingEcreditNote) return;
+    const billLink = getCreditNotePdfUrlFromPaymentResponse(paymentResponse?.data);
+    if (!billLink) {
+      showToast('error', 'Unavailable', 'Credit note link is not available.');
+      return;
+    }
+    setIsSendingEcreditNote(true);
+    try {
+      const storeNameOrOrg = storeName || orgName;
+      if (!customerPhone || !storeNameOrOrg) {
+        showToast('error', 'Missing data', 'Phone or store info missing.');
+        return;
+      }
+      const phoneNumber = customerPhone.replace(/\D/g, '').replace(/^91/, '') || customerPhone;
+      const payload = {
+        phoneNumber,
+        billUrl: billLink,
+        storeName: storeNameOrOrg,
+        name: customerName?.trim() || 'Customer',
+      };
+      const response = await sendEbill(payload);
+      if (response.success) {
+        showToast('success', 'Success', 'E-credit note sent successfully!');
+      } else {
+        showToast('error', 'Failed', response.error || 'Failed to send e-credit note.');
+      }
+    } catch (error) {
+      console.error('Send e-credit note error:', error);
+      showToast('error', 'Failed', 'Failed to send e-credit note. Please try again.');
+    } finally {
+      setIsSendingEcreditNote(false);
+    }
+  };
+
   const shouldShowEbill = !(isSendingEbill || !effectiveOrderId);
+  const creditNotePdfUrl = getCreditNotePdfUrlFromPaymentResponse(paymentResponse?.data);
+  const showCreditNoteTab = Boolean(creditNotePdfUrl);
 
   const discountLocked = selectedPaymentMethods.length > 0;
 
@@ -1092,8 +1283,59 @@ export default function QuickBillingCheckout({
           </View>
         )}
 
+        {cartItems.length > 0 ? (
+          <View style={styles.exchangeSection}>
+            <Pressable style={styles.exchangeToggle} onPress={() => setExchangeDialogOpen(true)}>
+              <Text style={styles.exchangeToggleText}>Exchange Product</Text>
+            </Pressable>
+            {exchangeData ? (
+              <View style={styles.exchangeSummary}>
+                <Text style={styles.exchangeSummaryText}>
+                  Exchange from Bill #{exchangeData.billId} - ₹{exchangeData.totalAmount.toFixed(2)}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setExchangeData(null);
+                    setExchangeRefundMode(null);
+                  }}
+                >
+                  <Text style={styles.exchangeClearText}>Clear</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         {/* Payment methods */}
         <View>
+          {surplusExchange >= 0.01 ? (
+            <View style={styles.refundBox}>
+              <Text style={styles.refundTitle}>Refund to customer</Text>
+              <Text style={styles.refundText}>Amount: ₹{surplusExchange.toFixed(2)}</Text>
+              <View style={styles.refundActions}>
+                <Pressable
+                  style={[
+                    styles.refundModeBtn,
+                    exchangeRefundMode === 'CASH' && styles.refundModeBtnActive,
+                  ]}
+                  onPress={() => setExchangeRefundMode('CASH')}
+                >
+                  <Text style={styles.refundModeText}>Cash</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.refundModeBtn,
+                    exchangeRefundMode === 'CREDIT_NOTE' && styles.refundModeBtnActive,
+                  ]}
+                  onPress={() => setExchangeRefundMode('CREDIT_NOTE')}
+                >
+                  <Text style={styles.refundModeText}>Credit Note</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          {!isRefundOnlySurplus ? (
+            <>
           <View style={styles.paymentMethodsGrid}>
             {paymentMethods.map(method => (
               <Pressable
@@ -1105,7 +1347,7 @@ export default function QuickBillingCheckout({
                 ]}
                 onPress={() => {
                   setTempSelectedMethod(method.key);
-                  if (remainingAmount > 0) {
+                  if (amountDueAfterExchange > 0 && remainingAmount > 0) {
                     setTempAmount(remainingAmount.toFixed(2));
                   }
                 }}
@@ -1190,15 +1432,19 @@ export default function QuickBillingCheckout({
                     setTempAmount(clean);
                   }}
                   placeholder={`Max: ₹${
-                    remainingAmount > 0
+                    amountDueAfterExchange > 0 && remainingAmount > 0
                       ? remainingAmount.toFixed(2)
+                      : amountDueAfterExchange > 0
+                      ? amountDueAfterExchange.toFixed(2)
                       : '0.00'
                   }`}
                   style={styles.fieldInput}
                   placeholderTextColor="#9ca3af"
+                  editable={amountDueAfterExchange > 0 && remainingAmount > 0}
                 />
                 {tempAmount &&
-                  Number(tempAmount) > remainingAmount && (
+                  Number(tempAmount) > remainingAmount + 0.001 &&
+                  amountDueAfterExchange > 0 && (
                     <Text style={styles.fieldErrorText}>
                       Amount exceeds pay amount
                     </Text>
@@ -1209,10 +1455,11 @@ export default function QuickBillingCheckout({
                 style={[
                   styles.addPaymentButton,
                   (remainingAmount <= 0 ||
+                    amountDueAfterExchange <= 0 ||
                     !tempAmount ||
                     Number(tempAmount) <= 0 ||
                     isNaN(Number(tempAmount)) ||
-                    Number(tempAmount) > remainingAmount ||
+                    Number(tempAmount) > remainingAmount + 0.001 ||
                     (tempSelectedMethod === 'upi' &&
                       (isFetchingUpi ||
                         upiFetchFailed ||
@@ -1221,10 +1468,11 @@ export default function QuickBillingCheckout({
                 ]}
                 disabled={
                   remainingAmount <= 0 ||
+                  amountDueAfterExchange <= 0 ||
                   !tempAmount ||
                   Number(tempAmount) <= 0 ||
                   isNaN(Number(tempAmount)) ||
-                  Number(tempAmount) > remainingAmount ||
+                  Number(tempAmount) > remainingAmount + 0.001 ||
                   (tempSelectedMethod === 'upi' &&
                     (isFetchingUpi ||
                       upiFetchFailed ||
@@ -1250,6 +1498,16 @@ export default function QuickBillingCheckout({
                 </Pressable>
               )}
             </View>
+          ) : null}
+            </>
+          ) : null}
+
+          {amountDueAfterExchange <= 0.005 && cartItems.length > 0 ? (
+            <Text style={styles.nothingToCollectText}>
+              {surplusExchange >= 0.01
+                ? 'Bill covered by exchange. Choose how customer receives excess.'
+                : 'Nothing to collect for this sale.'}
+            </Text>
           ) : null}
 
           {/* Selected payment methods */}
@@ -1389,11 +1647,23 @@ export default function QuickBillingCheckout({
             </Text>
           </View>
           <View style={[styles.summaryRow, styles.summaryRowBorderTop]}>
-            <Text style={styles.summaryLabelStrong}>Bill Amount</Text>
+            <Text style={styles.summaryLabelStrong}>Bill amount (after discount)</Text>
             <Text style={styles.summaryTotalStrong}>
               ₹{netTotal.toFixed(2)}
             </Text>
           </View>
+          {exchangeCreditAmount > 0 ? (
+            <>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Exchange items</Text>
+                <Text style={styles.summaryRemainingOk}>-₹{exchangeCreditAmount.toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabelStrong}>Amount payable</Text>
+                <Text style={styles.summaryTotalStrong}>₹{amountDueAfterExchange.toFixed(2)}</Text>
+              </View>
+            </>
+          ) : null}
         </View>
 
         {/* Pay Now button */}
@@ -1416,7 +1686,13 @@ export default function QuickBillingCheckout({
               : isCartEmpty
               ? 'No items in cart'
               : !isPaymentComplete
-              ? `Pay ₹${remainingAmount.toFixed(2)} more`
+              ? surplusExchange >= 0.01 && !refundSettlementComplete
+                ? `Choose refund (₹${surplusExchange.toFixed(2)})`
+                : amountDueAfterExchange > 0
+                ? `Pay ₹${remainingAmount.toFixed(2)} more`
+                : surplusExchange >= 0.01
+                ? 'Complete refund mode'
+                : 'Pay Now'
               : 'Pay Now'}
           </Text>
         </Pressable>
@@ -1436,7 +1712,24 @@ export default function QuickBillingCheckout({
               contentContainerStyle={styles.invoiceScrollContent}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.invoiceTitle}>Invoice</Text>
+              {showCreditNoteTab ? (
+                <View style={styles.successHeaderTabs}>
+                  <Pressable
+                    style={[styles.successTabBtn, paymentSuccessView === 'invoice' && styles.successTabBtnActive]}
+                    onPress={() => setPaymentSuccessView('invoice')}
+                  >
+                    <Text style={styles.successTabText}>Bill invoice</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.successTabBtn, paymentSuccessView === 'creditNote' && styles.successTabBtnActive]}
+                    onPress={() => setPaymentSuccessView('creditNote')}
+                  >
+                    <Text style={styles.successTabText}>Credit note</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.invoiceTitle}>Invoice</Text>
+              )}
               <Text style={styles.invoiceLabel}>
                 Total Amount
               </Text>
@@ -1454,15 +1747,21 @@ export default function QuickBillingCheckout({
                 </Text>
               </View>
 
-              {hasInvoicePreview ? (
+              {(paymentSuccessView === 'invoice' ? hasInvoicePreview : Boolean(creditNotePdfUrl)) ? (
                 <View style={styles.invoiceWebViewContainer}>
                   <WebView
-                    key={`${invoicePreviewMode}-${invoicePdfUri}`}
+                    key={
+                      paymentSuccessView === 'invoice'
+                        ? `${invoicePreviewMode}-${invoicePdfUri}`
+                        : `credit-${creditNotePdfUrl}`
+                    }
                     originWhitelist={['*']}
                     source={
-                      invoicePreviewMode === 'google'
-                        ? { html: invoicePreviewHtml }
-                        : { uri: invoicePdfUri }
+                      paymentSuccessView === 'invoice'
+                        ? invoicePreviewMode === 'google'
+                          ? { html: invoicePreviewHtml }
+                          : { uri: invoicePdfUri }
+                        : { uri: creditNotePdfUrl || '' }
                     }
                     style={styles.invoiceWebView}
                     javaScriptEnabled
@@ -1495,7 +1794,13 @@ export default function QuickBillingCheckout({
 
               <View style={styles.invoiceButtonsRow}>
                 <Pressable
-                  onPress={() => downloadReceipt(invoicePdfUri || undefined)}
+                  onPress={() =>
+                    downloadReceipt(
+                      paymentSuccessView === 'invoice'
+                        ? invoicePdfUri || undefined
+                        : creditNotePdfUrl || undefined,
+                    )
+                  }
                   style={styles.invoiceButton}
                 >
                   <Text style={styles.invoiceButtonText}>
@@ -1503,29 +1808,57 @@ export default function QuickBillingCheckout({
                   </Text>
                 </Pressable>
                 <Pressable
-                  onPress={printReceipt}
+                  onPress={
+                    paymentSuccessView === 'invoice'
+                      ? printReceipt
+                      : () => downloadReceipt(creditNotePdfUrl || undefined)
+                  }
                   style={styles.invoiceButton}
                 >
                   <Text style={styles.invoiceButtonText}>
                     Print
                   </Text>
                 </Pressable>
-                {!(
-                  isSendingEbill ||
-                  !effectiveOrderId
-                ) && (
+                {paymentSuccessView === 'invoice' ? (
+                  !(isSendingEbill || !effectiveOrderId) ? (
+                    <Pressable
+                      onPress={handleSendEbill}
+                      style={[
+                        styles.invoiceButton,
+                        styles.invoiceButtonSecondary,
+                      ]}
+                    >
+                      <Text style={styles.invoiceButtonSecondaryText}>
+                        E-bill
+                      </Text>
+                    </Pressable>
+                  ) : null
+                ) : (
                   <Pressable
-                    onPress={handleSendEbill}
+                    onPress={handleSendEcreditNote}
                     style={[
                       styles.invoiceButton,
                       styles.invoiceButtonSecondary,
                     ]}
                   >
                     <Text style={styles.invoiceButtonSecondaryText}>
-                      E-bill
+                      E-credit
                     </Text>
                   </Pressable>
                 )}
+                {showCreditNoteTab ? (
+                  <Pressable
+                    onPress={handleSendEbillAndCreditNote}
+                    style={[
+                      styles.invoiceButton,
+                      styles.invoiceButtonSecondary,
+                    ]}
+                  >
+                    <Text style={styles.invoiceButtonSecondaryText}>
+                      WhatsApp
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </ScrollView>
             <TouchableOpacity
@@ -1541,6 +1874,16 @@ export default function QuickBillingCheckout({
           </View>
         </View>
       </Modal>
+
+      <QuickBillingExchangeDialog
+        open={exchangeDialogOpen}
+        onClose={() => setExchangeDialogOpen(false)}
+        onApply={(payload: QuickBillingExchangeApplyPayload) => {
+          setExchangeData(payload);
+          setSelectedPaymentMethods([]);
+          setExchangeRefundMode(null);
+        }}
+      />
     </View>
   );
 }
@@ -1579,6 +1922,93 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     paddingBottom: 8,
     marginBottom: 8,
+  },
+  exchangeSection: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  exchangeToggle: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  exchangeToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  exchangeSummary: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  exchangeSummaryText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#92400e',
+  },
+  exchangeClearText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  refundBox: {
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 8,
+  },
+  refundTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#78350f',
+  },
+  refundText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#92400e',
+  },
+  refundActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  refundModeBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  refundModeBtnActive: {
+    borderColor: '#0064c2',
+    backgroundColor: '#eff6ff',
+  },
+  refundModeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  nothingToCollectText: {
+    marginTop: 6,
+    fontSize: 11,
+    color: '#475569',
   },
   discountToggle: {
     flexDirection: 'row',
@@ -2055,6 +2485,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginBottom: 4,
+  },
+  successHeaderTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  successTabBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  successTabBtnActive: {
+    backgroundColor: '#0064c2',
+    borderColor: '#0064c2',
+  },
+  successTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
   },
   invoiceLabel: {
     fontSize: 12,

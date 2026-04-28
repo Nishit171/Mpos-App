@@ -159,6 +159,22 @@ export const sendLumeEbill = async (orderId: string) => {
   }
 };
 
+// Send e-bill + credit note (backend shortens + sends WhatsApp)
+export const sendEbillAndCreditNote = async (payload: any) => {
+  try {
+    const axiosConfig = await getAxiosConfig();
+    const response = await axios.post(
+      `${BASE_URL}/lumepos/ws/sendEbillAndCreditNote`,
+      payload,
+      axiosConfig
+    );
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error("Error sending e-bill and credit note:", error);
+    return { success: false, error: "Failed to send WhatsApp message" };
+  }
+};
+
 // Get GST number (for Tax Invoice check)
 export const getGst = async () => {
   try {

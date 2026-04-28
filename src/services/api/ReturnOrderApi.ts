@@ -6,8 +6,21 @@ const getAuthHeaders = async () => {
   return {
     Authorization: token ? `Bearer ${token}` : '',
     'app-access-id': '1011',
+    Accept: 'application/json, text/plain, */*',
   };
 };
+
+// Backend may return `validate` as string/boolean or via status.
+export function isValidateQuantitySuccess(res: unknown): boolean {
+  if (!res || typeof res !== 'object') return false;
+  const r = res as Record<string, unknown>;
+  const v = r.validate;
+  if (typeof v === 'string') return v.toLowerCase() === 'success';
+  if (v === true) return true;
+  const s = r.status;
+  if (typeof s === 'string') return s.toLowerCase() === 'success';
+  return false;
+}
 
 export const getOrderDetails = async (billId: any) => {
   try {
@@ -96,9 +109,9 @@ export const getvalidateQuantity = async (
   size: any
 ) => {
   const formData = new FormData();
-  formData.append("itemCode", itemCode);
-  formData.append("orderId", billId);
-  formData.append("size", size);
+  formData.append("itemCode", String(itemCode));
+  formData.append("orderId", String(billId));
+  formData.append("size", String(size));
   try {
     const response = await fetch(`${BASE_URL}/lumepos/ws/validateQuantity`, {
       method: "POST",

@@ -7,6 +7,7 @@ import {
   Image,
   Pressable,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { BASE_URL } from '../../../services/constants/config';
@@ -17,6 +18,9 @@ interface QuickBillingCartTableProps {
   onUpdatePrice: (id: string | number, newPrice: number) => void;
   onRemoveFromCart: (id: string | number) => void;
   onClearCart: () => void;
+  // Add next numbered SKU (e.g. Dress -> Dress 2)
+  onAddNextVariant?: (item: any) => void;
+  variantPlusLoadingId?: string | number | null;
 }
 
 export default function QuickBillingCartTable({
@@ -25,6 +29,8 @@ export default function QuickBillingCartTable({
   onUpdatePrice,
   onRemoveFromCart,
   onClearCart,
+  onAddNextVariant,
+  variantPlusLoadingId = null,
 }: QuickBillingCartTableProps) {
   const [editingPriceId, setEditingPriceId] = useState<string | number | null>(
     null,
@@ -133,9 +139,27 @@ export default function QuickBillingCartTable({
                     )}
                   </View>
                   <View style={styles.textColumn}>
-                    <Text style={styles.productName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
+                    <View style={styles.nameRow}>
+                      {onAddNextVariant ? (
+                        <Pressable
+                          onPress={() => onAddNextVariant(item)}
+                          disabled={variantPlusLoadingId === item.id}
+                          style={[
+                            styles.variantButton,
+                            variantPlusLoadingId === item.id && styles.variantButtonDisabled,
+                          ]}
+                        >
+                          {variantPlusLoadingId === item.id ? (
+                            <ActivityIndicator size="small" color="#0064c2" />
+                          ) : (
+                            <Icon name="playlist-add" size={18} color="#0064c2" />
+                          )}
+                        </Pressable>
+                      ) : null}
+                      <Text style={styles.productName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                    </View>
                     <View style={styles.priceLine}>
                       {isEditingPrice ? (
                         <TextInput
@@ -310,10 +334,25 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   productName: {
-    flexShrink: 1,
+    flex: 1,
     fontSize: 13,
     fontWeight: '500',
     color: '#111827',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  variantButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  variantButtonDisabled: {
+    opacity: 0.5,
   },
   textColumn: {
     flex: 1,
