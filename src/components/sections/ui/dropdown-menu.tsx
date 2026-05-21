@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, Pressable, StyleSheet, Modal, ViewStyle } from 'react-native';
+import { View, Pressable, StyleSheet, ViewStyle } from 'react-native';
 
 export interface DropdownMenuProps {
   children: React.ReactNode;

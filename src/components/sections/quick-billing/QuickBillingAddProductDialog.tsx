@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   Pressable,
-  Modal,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { addProduct } from '../../../services/api/productService';
 import Toast from 'react-native-toast-message';
+import PortalModal from '../ui/PortalModal';
 
 type BillType = 'taxInvoice' | 'invoice';
 
@@ -296,11 +296,11 @@ export default function QuickBillingAddProductDialog({
 
 
   return (
-    <Modal
+    <PortalModal
       visible={isOpen}
-      transparent
-      animationType="slide"
       onRequestClose={handleCancel}
+      animationType="slide"
+      passthrough
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
@@ -542,7 +542,7 @@ export default function QuickBillingAddProductDialog({
           </View>
         </View>
       </View>
-    </Modal>
+    </PortalModal>
   );
 }
 

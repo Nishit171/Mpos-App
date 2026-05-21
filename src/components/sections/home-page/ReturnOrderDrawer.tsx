@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Modal,
   StyleSheet,
   TextInput,
   Dimensions,
@@ -18,6 +17,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import CreditNoteModal from './CreditNote';
 import CreditNoteType from './CreditNoteType';
 import BarcodeDialog from './BarcodeDialog';
+import PortalModal from '../ui/PortalModal';
 import {
   getItemDetails,
   getOrderDetails,
@@ -61,6 +61,9 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
   onClose,
   onGoHome,
 }) => {
+  // TEMP: toast visibility test on drawer open
+  const [wasOpen, setWasOpen] = useState(false);
+
   const [billId, setBillId] = useState('');
   const [itemCode, setItemCode] = useState('');
   const [submittedBillId, setSubmittedBillId] = useState('');
@@ -382,6 +385,14 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
         setSavingReturns(returnImg);
         setBillPdfUrl(billPdf || '');
         setCreditNotPdfUrl(customerPdf || '');
+        Toast.show({
+          type: 'success',
+          text1: 'Return Successful',
+          text2: 'Return order has been processed successfully',
+          position: 'top',
+          visibilityTime: 2500,
+          autoHide: true,
+        });
         return true;
       }
       return false;
@@ -426,16 +437,29 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
     console.log('RETURN DRAWER VISIBLE:', open);
   }, [open]);
 
+  useEffect(() => {
+    if (open && !wasOpen) {
+      Toast.show({
+        type: 'success',
+        text1: 'Return Screen Opened',
+        text2: 'Toast visibility test',
+        position: 'top',
+        visibilityTime: 2000,
+        autoHide: true,
+      });
+    }
+    setWasOpen(open);
+  }, [open, wasOpen]);
+
   return (
-    <Modal
+    <PortalModal
       visible={open}
-      transparent
-      animationType="slide"
       onRequestClose={closeDrawer}
+      overlayAlign="center"
+      overlayPadding={0}
+      animationType="slide"
+      contentStyle={[styles.drawer, { width: '100%' }]}
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={closeDrawer} />
-        <View style={[styles.drawer, { width: drawerMaxWidth }]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Icon name="inbox" size={22} color="#0064c2" />
@@ -737,8 +761,6 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
               }}
             />
           </ScrollView>
-        </View>
-      </View>
 
       <BarcodeDialog
         isOpen={isBarcodeDialogOpen && barcodeDialogTarget !== null}
@@ -767,7 +789,7 @@ const ReturnOrderDrawer: React.FC<ReturnOrderDrawerProps> = ({
         }
         cartItems={[]}
       />
-    </Modal>
+    </PortalModal>
   );
 };
 

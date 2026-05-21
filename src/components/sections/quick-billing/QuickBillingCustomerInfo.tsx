@@ -7,11 +7,11 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { searchCustomers } from '../../../services/api/customerService';
 import { getGst, saveGst } from '../../../services/api/orderService';
+import PortalModal from '../ui/PortalModal';
 
 interface Customer {
   id: number;
@@ -448,14 +448,14 @@ export default function QuickBillingCustomerInfo({
       )}
 
       {/* GST dialog */}
-      <Modal
+      <PortalModal
         visible={showGstDialog}
-        transparent
-        animationType="fade"
         onRequestClose={() => {
           setShowGstDialog(false);
           setGstInput('');
         }}
+        animationType="fade"
+        passthrough
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContent}>
@@ -504,7 +504,7 @@ export default function QuickBillingCustomerInfo({
             </View>
           </View>
         </View>
-      </Modal>
+      </PortalModal>
     </View>
   );
 }

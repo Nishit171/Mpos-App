@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  Modal,
   Pressable,
   StyleSheet,
   Image,
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useCart } from '../../../context/cart-context';
+import PortalModal from '../ui/PortalModal';
 
 const FALLBACK_IMAGE = require('../../../assets/noImage.png');
 
@@ -123,12 +123,7 @@ export default function ProductDetailModal({
       : FALLBACK_IMAGE;
 
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <PortalModal visible={open} onRequestClose={onClose} animationType="fade" passthrough>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.modal} onPress={e => e.stopPropagation()}>
           {/* Close Button */}
@@ -225,7 +220,7 @@ export default function ProductDetailModal({
           </ScrollView>
         </Pressable>
       </Pressable>
-    </Modal>
+    </PortalModal>
   );
 }
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
-  Modal,
   Pressable,
   StyleSheet,
   TextInput,
@@ -18,6 +17,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import BarcodeScanning from '@react-native-ml-kit/barcode-scanning';
 import { getMultipleProducts } from '../../../services/api/productService';
+import PortalModal from '../ui/PortalModal';
 
 const FALLBACK_IMAGE = require('../../../assets/noImage.png');
 
@@ -398,7 +398,7 @@ export default function BarcodeDialog({
 
   if (cameraPermission !== null && cameraPermission !== RESULTS.GRANTED && cameraPermission !== RESULTS.LIMITED) {
   return (
-      <Modal visible={isOpen} transparent animationType="slide">
+      <PortalModal visible={isOpen} onRequestClose={onClose} animationType="slide" passthrough>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.errorText}>
@@ -410,13 +410,13 @@ export default function BarcodeDialog({
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </PortalModal>
     );
   }
 
   if (!device) {
     return (
-      <Modal visible={isOpen} transparent animationType="slide">
+      <PortalModal visible={isOpen} onRequestClose={onClose} animationType="slide" passthrough>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.errorText}>
@@ -427,12 +427,12 @@ export default function BarcodeDialog({
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </PortalModal>
     );
   }
 
   return (
-    <Modal visible={isOpen} transparent animationType="slide">
+    <PortalModal visible={isOpen} onRequestClose={handleClose} animationType="slide" passthrough>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
@@ -700,7 +700,7 @@ export default function BarcodeDialog({
           )}
         </View>
       </View>
-    </Modal>
+    </PortalModal>
   );
 }
 

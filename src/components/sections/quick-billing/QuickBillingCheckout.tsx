@@ -7,7 +7,6 @@ import {
   ScrollView,
   Pressable,
   TouchableOpacity,
-  Modal,
   Linking,
   Dimensions,
   Image,
@@ -17,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { useCart } from '../../../context/cart-context';
 import { useAuth } from '../../../context/auth-context';
+import PortalModal from '../ui/PortalModal';
 import { saveCustomer } from '../../../services/api/customerService';
 import {
   validateCreditNote,
@@ -1699,14 +1699,12 @@ export default function QuickBillingCheckout({
       </View>
 
       {/* Payment success modal */}
-      <Modal
+      <PortalModal
         visible={isModalOpen}
-        transparent
-        animationType="fade"
         onRequestClose={closeModal}
+        overlayAlign="center"
+        contentStyle={styles.invoiceModal}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.invoiceModal}>
             <ScrollView
               style={styles.invoiceScroll}
               contentContainerStyle={styles.invoiceScrollContent}
@@ -1871,9 +1869,7 @@ export default function QuickBillingCheckout({
             >
               <Text style={styles.invoiceCloseText}>✕</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      </PortalModal>
 
       <QuickBillingExchangeDialog
         open={exchangeDialogOpen}

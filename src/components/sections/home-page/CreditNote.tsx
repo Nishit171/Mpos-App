@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
+import PortalModal from '../ui/PortalModal';
 
 interface CreditNoteModalProps {
   creditNoteModal: boolean;
@@ -75,11 +75,11 @@ export default function CreditNoteModal({
   };
 
   return (
-    <Modal
+    <PortalModal
       visible={creditNoteModal}
-      transparent
-      animationType="fade"
       onRequestClose={handleClose}
+      animationType="fade"
+      passthrough
     >
       <View style={styles.backdrop}>
         <Pressable style={styles.backdropPress} onPress={handleClose} />
@@ -155,7 +155,7 @@ export default function CreditNoteModal({
           </ScrollView>
         </View>
       </View>
-    </Modal>
+    </PortalModal>
   );
 }
 

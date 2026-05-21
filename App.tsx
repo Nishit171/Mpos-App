@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
+import { RootSiblingParent } from "react-native-root-siblings";
+import { PortalProvider } from "./src/components/sections/ui/portal";
 import QuickBillingHomePage from "./src/components/sections/quick-billing/QuickBillingHomePage";
 import LoginComponent from "./src/components/sections/login/login-component";
 import { CartProvider } from "./src/context/cart-context";
@@ -48,14 +50,20 @@ function RootNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <SafeAreaView style={{ flex: 1 }}>
-          <RootNavigator />
-          <Toast position="top" visibilityTime={2500} />
-        </SafeAreaView>
-      </CartProvider>
-    </AuthProvider>
+    <RootSiblingParent>
+      <PortalProvider>
+        <AuthProvider>
+          <CartProvider>
+            <SafeAreaView style={{ flex: 1 }}>
+              <RootNavigator />
+            </SafeAreaView>
+          </CartProvider>
+        </AuthProvider>
+      </PortalProvider>
+
+      {/* Toast MUST be above portal host + screens */}
+      <Toast position="top" visibilityTime={2500} topOffset={48} />
+    </RootSiblingParent>
   );
 }
 

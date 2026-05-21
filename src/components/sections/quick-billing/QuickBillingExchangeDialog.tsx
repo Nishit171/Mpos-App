@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,7 @@ import {
   isValidateQuantitySuccess,
 } from '../../../services/api/ReturnOrderApi';
 import BarcodeDialog from '../home-page/BarcodeDialog';
+import PortalModal from '../ui/PortalModal';
 
 export type QuickBillingExchangeApplyPayload = {
   billId: string;
@@ -268,7 +268,7 @@ export default function QuickBillingExchangeDialog({
 
   return (
     <>
-      <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <PortalModal visible={open} onRequestClose={onClose} animationType="slide" passthrough>
         <View style={styles.overlay}>
           <View style={styles.container}>
             <View style={styles.header}>
@@ -457,7 +457,7 @@ export default function QuickBillingExchangeDialog({
             </View>
           </View>
         </View>
-      </Modal>
+      </PortalModal>
 
       <BarcodeDialog
         isOpen={barcodeOpen}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import PortalModal from '../ui/PortalModal';
 
 interface CreditNoteTypeProps {
   open: boolean;
@@ -17,12 +18,7 @@ export default function CreditNoteType({
   onSecondAction,
 }: CreditNoteTypeProps) {
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <PortalModal visible={open} onRequestClose={onClose} animationType="fade" passthrough>
       <View style={styles.backdrop}>
         <View style={styles.modal}>
           <View style={styles.headerRow}>
@@ -52,7 +48,7 @@ export default function CreditNoteType({
           </View>
         </View>
       </View>
-    </Modal>
+    </PortalModal>
   );
 }
 

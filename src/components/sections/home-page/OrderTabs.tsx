@@ -7,13 +7,13 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
-  Modal,
   TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveUpi } from '../../../services/api/orderService';
 import { Input } from '../ui/input';
+import PortalModal from '../ui/PortalModal';
 
 const MAX_ORDERS = 5;
 
@@ -242,11 +242,11 @@ export default function OrderTabs({
       </View>
 
       {/* UPI Modal */}
-      <Modal
+      <PortalModal
         visible={upiOpen}
-        transparent
-        animationType="slide"
         onRequestClose={() => setUpiOpen(false)}
+        animationType="slide"
+        passthrough
       >
         <View style={styles.modalOverlay}>
           <View style={styles.upiModal}>
@@ -314,7 +314,7 @@ export default function OrderTabs({
             </View>
           </View>
         </View>
-      </Modal>
+      </PortalModal>
     </View>
   );
 }

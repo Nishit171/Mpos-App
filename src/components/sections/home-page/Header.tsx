@@ -5,7 +5,6 @@ import {
   Image,
   Pressable,
   StyleSheet,
-  Modal,
   TextInput,
   Alert,
   ActivityIndicator,
@@ -13,11 +12,12 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useCart } from '../../../context/cart-context';
 import { useAuth } from '../../../context/auth-context';
-import { saveUpi } from '../../../services/api/orderService';
+import { getUpiId, saveUpi } from '../../../services/api/orderService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Input } from '../ui/input';
+import PortalModal from '../ui/PortalModal';
 
 interface HeaderProps {
   onCartClick?: () => void;
@@ -52,6 +52,16 @@ export default function Header({
   const [upiMessage, setUpiMessage] = useState<string | null>(null);
   const [savedUpiId, setSavedUpiId] = useState<string>('');
   const [upiError, setUpiError] = useState<string>('');
+
+  const extractUpiId = (payload: any): string => {
+    if (!payload) return '';
+    if (typeof payload.upiId === 'string' && payload.upiId.trim()) return payload.upiId.trim();
+    if (typeof payload.data === 'string' && payload.data.trim()) return payload.data.trim();
+    if (payload.data && typeof payload.data.upiId === 'string' && payload.data.upiId.trim()) {
+      return payload.data.upiId.trim();
+    }
+    return '';
+  };
 
   const validateUpiId = (upi: string): { isValid: boolean; error: string } => {
     if (!upi || upi.trim() === '') {
@@ -107,10 +117,24 @@ export default function Header({
         }
       }
       try {
-        const storedUpi = await AsyncStorage.getItem('userUpiId');
-        if (storedUpi) setSavedUpiId(storedUpi);
+        const upiRes = await getUpiId();
+        const apiUpi = upiRes.success ? extractUpiId(upiRes.data) : '';
+        if (apiUpi) {
+          setSavedUpiId(apiUpi);
+          await AsyncStorage.setItem('userUpiId', apiUpi);
+        } else {
+          const storedUpi = await AsyncStorage.getItem('userUpiId');
+          setSavedUpiId(storedUpi || '');
+        }
       } catch (error) {
-        console.warn('Failed to load UPI ID from storage', error);
+        console.warn('Failed to load UPI ID from API/storage', error);
+        try {
+          const storedUpi = await AsyncStorage.getItem('userUpiId');
+          setSavedUpiId(storedUpi || '');
+        } catch (storageError) {
+          console.warn('Failed to load UPI ID from storage', storageError);
+          setSavedUpiId('');
+        }
       }
     };
     loadUserData();
@@ -232,11 +256,11 @@ export default function Header({
       </View>
 
       {/* User Menu Modal */}
-      <Modal
+      <PortalModal
         visible={showUserMenu}
-        transparent
-        animationType="fade"
         onRequestClose={() => setShowUserMenu(false)}
+        animationType="fade"
+        passthrough
       >
         <Pressable
           style={styles.modalOverlay}
@@ -260,7 +284,7 @@ export default function Header({
                   )}
                 </View>
               </View>
-              {savedUpiId && (
+              {savedUpiId ? (
                 <View style={styles.upiBadge}>
                   <Image
                     source={require('../../../assets/upii.png')}
@@ -270,6 +294,8 @@ export default function Header({
                   <Text style={styles.upiLabel}>UPI:</Text>
                   <Text style={styles.upiValue}>{savedUpiId}</Text>
                 </View>
+              ) : (
+                <Text style={styles.upiEmptyText}>UPI ID not set</Text>
               )}
             </View>
 
@@ -292,17 +318,17 @@ export default function Header({
             </Pressable>
           </View>
         </Pressable>
-      </Modal>
+      </PortalModal>
 
       {/* UPI Modal */}
-      <Modal
+      <PortalModal
         visible={showUpiModal || showUpiForm}
-        transparent
-        animationType="slide"
         onRequestClose={() => {
           setShowUpiModal(false);
           setShowUpiForm(false);
         }}
+        animationType="slide"
+        passthrough
       >
         <View style={styles.modalOverlay}>
           <View style={styles.upiModal}>
@@ -319,10 +345,15 @@ export default function Header({
               </Pressable>
             </View>
 
-            {savedUpiId && (
+            {savedUpiId ? (
               <View style={styles.currentUpiContainer}>
                 <Text style={styles.currentUpiLabel}>Current UPI ID:</Text>
                 <Text style={styles.currentUpiValue}>{savedUpiId}</Text>
+              </View>
+            ) : (
+              <View style={styles.currentUpiContainer}>
+                <Text style={styles.currentUpiLabel}>Current UPI ID:</Text>
+                <Text style={styles.currentUpiEmptyValue}>Not set</Text>
               </View>
             )}
 
@@ -379,7 +410,7 @@ export default function Header({
             </View>
           </View>
         </View>
-      </Modal>
+      </PortalModal>
     </View>
   );
 }
@@ -525,6 +556,11 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     color: '#92400e',
   },
+  upiEmptyText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#6b7280',
+  },
   menuSeparator: {
     height: 1,
     backgroundColor: '#e5e7eb',
@@ -587,6 +623,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
+  },
+  currentUpiEmptyValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
   },
   upiForm: {
     gap: 12,
