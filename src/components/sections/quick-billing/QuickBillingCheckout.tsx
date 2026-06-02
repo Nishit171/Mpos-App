@@ -1,5 +1,6 @@
 import React, { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   TextInput,
@@ -315,21 +316,6 @@ export default function QuickBillingCheckout({
     ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
         invoicePdfUri,
       )}`
-    : '';
-  const invoicePreviewHtml = invoicePreviewWebUri
-    ? `<!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
-      html, body { margin: 0; padding: 0; height: 100%; background: #fff; }
-      iframe { border: 0; width: 100%; height: 100%; }
-    </style>
-  </head>
-  <body>
-    <iframe src="${invoicePreviewWebUri}" allowfullscreen></iframe>
-  </body>
-</html>`
     : '';
   const [invoicePreviewMode, setInvoicePreviewMode] = useState<
     'google' | 'direct'
@@ -1059,7 +1045,8 @@ export default function QuickBillingCheckout({
     }
   };
 
-  const shouldShowEbill = !(isSendingEbill || !effectiveOrderId);
+  const hasCustomerPhone = !!(customerPhone?.replace(/\D/g, ''));
+  const shouldShowEbill = !(isSendingEbill || !effectiveOrderId) && hasCustomerPhone;
   const creditNotePdfUrl = getCreditNotePdfUrlFromPaymentResponse(paymentResponse?.data);
   const showCreditNoteTab = Boolean(creditNotePdfUrl);
 
@@ -1080,13 +1067,6 @@ export default function QuickBillingCheckout({
         upiPayUri,
       )}`
     : '';
-
-  // Diagnostics: why E-bill button isn't rendering
-  console.log('EBILL DEBUG', {
-    isSendingEbill,
-    effectiveOrderId,
-  });
-  console.log('EBILL SHOULD SHOW:', shouldShowEbill);
 
   return (
     <View style={styles.card}>
@@ -1757,7 +1737,7 @@ export default function QuickBillingCheckout({
                     source={
                       paymentSuccessView === 'invoice'
                         ? invoicePreviewMode === 'google'
-                          ? { html: invoicePreviewHtml }
+                          ? { uri: invoicePreviewWebUri }
                           : { uri: invoicePdfUri }
                         : { uri: creditNotePdfUrl || '' }
                     }
@@ -1769,6 +1749,11 @@ export default function QuickBillingCheckout({
                     scrollEnabled
                     nestedScrollEnabled
                     mixedContentMode="always"
+                    renderLoading={() => (
+                      <View style={styles.invoiceLoadingContainer}>
+                        <ActivityIndicator size="large" color="#0064c2" />
+                      </View>
+                    )}
                     onError={() => {
                       if (invoicePreviewMode === 'google') {
                         setInvoicePreviewMode('direct');
@@ -1818,7 +1803,7 @@ export default function QuickBillingCheckout({
                   </Text>
                 </Pressable>
                 {paymentSuccessView === 'invoice' ? (
-                  !(isSendingEbill || !effectiveOrderId) ? (
+                  shouldShowEbill ? (
                     <Pressable
                       onPress={handleSendEbill}
                       style={[
@@ -2470,6 +2455,12 @@ const styles = StyleSheet.create({
   invoiceWebView: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  invoiceLoadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   invoiceScrollContent: {
     paddingTop: 8,

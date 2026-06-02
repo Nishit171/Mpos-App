@@ -266,6 +266,8 @@ export default function QuickBillingExchangeDialog({
     showToast('success', 'Success', 'Exchange applied to checkout');
   };
 
+  if (!open) return null;
+
   return (
     <>
       <PortalModal visible={open} onRequestClose={onClose} animationType="slide" passthrough>
