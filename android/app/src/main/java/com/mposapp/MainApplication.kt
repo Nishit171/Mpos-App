@@ -1,4 +1,4 @@
-package com.mposapp
+package com.lumeposapp
 
 import android.app.Application
 import com.facebook.react.PackageList
